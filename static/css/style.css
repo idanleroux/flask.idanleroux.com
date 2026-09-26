@@ -1,0 +1,21 @@
+body {
+  min-height: 100vh;
+  margin: 0;
+  background-color: rgb(4, 26, 50);
+}
+
+.title {
+    font: 24px Calibri, sans-serif;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+
+.test {
+    font: 16px Calibri, sans-serif;
+    background-color: lightblue;
+    color: darkblue;
+    padding: 10px;
+    margin: 10px;
+    max-width: 300px;
+}
