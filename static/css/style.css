@@ -1,18 +1,19 @@
 body {
-  min-height: 100vh;
-  margin: 0;
-  background-color: rgb(4, 26, 50);
+    min-height: 100vh;
+    margin: 0;
+    background-color: rgb(4, 26, 50);
+    font-family: Calibri;
 }
 
 .title {
-    font: 24px Calibri, sans-serif;
+    font-size: 24px;
     color: white;
     text-align: center;
     padding: 20px;
 }
 
 .test {
-    font: 16px Calibri, sans-serif;
+    font-size: 16px;
     background-color: lightblue;
     color: darkblue;
     padding: 10px;
