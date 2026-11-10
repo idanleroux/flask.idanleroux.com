@@ -1,0 +1,202 @@
+{% extends "political_tracker/base.html" %}
+
+{% block title %}{{ member.display_name }} – Political Tracker{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('political_tracker.static', filename='member.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="member-page">
+  <header class="member-header">
+    <div class="member-identity">
+      <h1>{{ member.display_name }}</h1>
+      <dl class="member-meta">
+        <dt>Party</dt>
+        <dd><span class="party-badge" style="--party-colour: {{ party_colour(member.party) }}">{{ member.party }}</span></dd>
+        <dt>Chamber</dt>
+        <dd>{{ 'House of Representatives' if member.chamber == 'house' else 'Senate' if member.chamber == 'senate' else 'House of Commons' }}</dd>
+        {% if country == 'US' %}
+        <dt>State</dt>
+        <dd>{{ member.state_or_nation }}</dd>
+        <dt>District</dt>
+        <dd>{{ member.district_or_constituency or 'At-large' }}</dd>
+        {% else %}
+        <dt>Nation</dt>
+        <dd>{{ member.state_or_nation or '—' }}</dd>
+        <dt>Constituency</dt>
+        <dd>{{ member.district_or_constituency }}</dd>
+        {% endif %}
+        <dt>In office since</dt>
+        <dd>{{ member.start_date.strftime('%d %B %Y') if member.start_date else '—' }}</dd>
+        {% if member.ideology_score is not none %}
+        <dt>Voteview ideology (NOMINATE dim.1)</dt>
+        <dd>{{ '%.3f'|format(member.ideology_score) }} <span class="muted">(estimate)</span></dd>
+        {% endif %}
+      </dl>
+    </div>
+  </header>
+
+  <section class="member-stats" aria-labelledby="stats-heading">
+    <h2 id="stats-heading">Voting statistics</h2>
+    <dl class="stats-grid">
+      <div class="stat">
+        <dt>Participation</dt>
+        <dd class="stat-value">{{ '%.1f'|format(member.participation_pct) if member.participation_pct is not none else '—' }}%</dd>
+        <dd class="stat-detail">{{ member.votes_cast or 0 }} of {{ member.votes_eligible or 0 }} votes</dd>
+      </div>
+      {% if country == 'US' %}
+      <div class="stat">
+        <dt>Party loyalty</dt>
+        <dd class="stat-value">{{ '%.1f'|format(member.party_loyalty_pct) if member.party_loyalty_pct is not none else '—' }}%</dd>
+        <dd class="stat-detail">{{ member.votes_against_party_count or 0 }} votes against party majority</dd>
+      </div>
+      {% else %}
+      <div class="stat">
+        <dt>Votes against party majority</dt>
+        <dd class="stat-value">{{ member.votes_against_party_count or 0 }}</dd>
+      </div>
+      {% endif %}
+    </dl>
+  </section>
+
+  <section class="member-votes" aria-labelledby="votes-heading">
+    <header class="section-header">
+      <h2 id="votes-heading">Voting record</h2>
+      <form class="vote-filters" method="get" action="">
+        <input type="hidden" name="page" value="1">
+        <div class="filter-group">
+          <label for="vote-position" class="visually-hidden">Filter by vote position</label>
+          <select id="vote-position" name="position">
+            <option value="">All positions</option>
+            <option value="1" {% if vote_filters.position == '1' %}selected{% endif %}>Aye / Yes</option>
+            <option value="2" {% if vote_filters.position == '2' %}selected{% endif %}>No</option>
+            <option value="3" {% if vote_filters.position == '3' %}selected{% endif %}>Abstain</option>
+            <option value="4" {% if vote_filters.position == '4' %}selected{% endif %}>Absent</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="checkbox-inline">
+            <input type="checkbox" name="against_party" value="1" {% if vote_filters.against_party %}checked{% endif %}>
+            <span>Only votes against party majority</span>
+          </label>
+        </div>
+        <button type="submit" class="btn btn--primary">Filter</button>
+      </form>
+    </header>
+
+    <div class="table-wrapper">
+      <table class="data-table" aria-describedby="votes-caption">
+        <caption id="votes-caption" class="visually-hidden">Recent votes</caption>
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Title</th>
+            <th scope="col">Vote</th>
+            <th scope="col">Party majority</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in votes %}
+          <tr>
+            <td class="date">{{ v.vote_date.strftime('%d %b %Y') }}</td>
+            <td>
+              <strong>{{ v.title }}</strong>
+              {% if v.question %}<br><span class="muted">{{ v.question }}</span>{% endif %}
+            </td>
+            <td>
+              <span class="vote-position vote-position--{{ v.position_label|lower }}">
+                {{ v.position_label }}
+              </span>
+            </td>
+            <td>
+              {% if v.party_at_vote %}
+                <span class="party-majority {% if v.voted_against_party %}party-majority--against{% endif %}">
+                  {{ v.party_at_vote }} majority: {{ 'Aye' if (v.result and 'Aye' in v.result) or (v.result and 'Pass' in v.result) else 'No' }}
+                  {% if v.voted_against_party %}<span class="against-badge">← against</span>{% endif %}
+                </span>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty">No votes match the current filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if vote_pagination.total_pages > 1 %}
+    <nav class="pagination" aria-label="Vote pagination">
+      {% if vote_pagination.page > 1 %}
+      <a href="{{ url_for(request.endpoint, page=vote_pagination.page-1, **request.args) }}" class="btn btn--secondary">Previous</a>
+      {% endif %}
+      <span class="pagination-info">Page {{ vote_pagination.page }} of {{ vote_pagination.total_pages }} ({{ vote_pagination.total }} votes)</span>
+      {% if vote_pagination.page < vote_pagination.total_pages %}
+      <a href="{{ url_for(request.endpoint, page=vote_pagination.page+1, **request.args) }}" class="btn btn--secondary">Next</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+  </section>
+
+  <section class="member-similarity" aria-labelledby="similar-heading">
+    <h2 id="similar-heading">Similar members</h2>
+    <div class="similarity-toggle">
+      <label class="checkbox-inline">
+        <input type="checkbox" id="similar-same-party" checked>
+        <span>Same chamber & party only</span>
+      </label>
+    </div>
+
+    <div class="similarity-pair">
+      <div class="similarity-column">
+        <h3>Most similar</h3>
+        {% if most_similar %}
+        <ul class="similarity-list">
+          {% for s in most_similar %}
+          <li>
+            <a href="{{ url_for('political_tracker.us_member' if country == 'US' else 'political_tracker.uk_member', source_id=s[0] if country == 'US' else s[0]) }}" class="similarity-link">
+              <span class="similarity-name">{{ s[1] }}</span>
+              <span class="similarity-party" style="--party-colour: {{ party_colour(s[2]) }}">{{ s[2] }}</span>
+              <span class="similarity-place">{{ s[3] }}</span>
+              <span class="similarity-score">{{ '%.1f'|format(s[6]) }}% ({{ s[4] }} shared)</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty">Insufficient shared votes to calculate similarity.</p>
+        {% endif %}
+      </div>
+      <div class="similarity-column">
+        <h3>Least similar</h3>
+        {% if least_similar %}
+        <ul class="similarity-list">
+          {% for s in least_similar %}
+          <li>
+            <a href="{{ url_for('political_tracker.us_member' if country == 'US' else 'political_tracker.uk_member', source_id=s[0] if country == 'US' else s[0]) }}" class="similarity-link">
+              <span class="similarity-name">{{ s[1] }}</span>
+              <span class="similarity-party" style="--party-colour: {{ party_colour(s[2]) }}">{{ s[2] }}</span>
+              <span class="similarity-place">{{ s[3] }}</span>
+              <span class="similarity-score">{{ '%.1f'|format(s[6]) }}% ({{ s[4] }} shared)</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty">Insufficient shared votes to calculate similarity.</p>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  {% if country == 'US' and member.fec_candidate_id %}
+  <section class="member-finance" aria-labelledby="finance-heading">
+    <h2 id="finance-heading">Campaign finance <span class="muted">(Phase 6)</span></h2>
+    <p class="finance-notice">Data from openFEC. Shows aggregate totals only; excludes super PAC and other outside spending.</p>
+    <div class="finance-placeholder">Campaign finance panel will appear here after Phase 6 ingest.</div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

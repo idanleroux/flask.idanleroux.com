@@ -1,0 +1,112 @@
+{% extends "political_tracker/base.html" %}
+
+{% block title %}About – Political Tracker{% endblock %}
+
+{% block content %}
+<div class="about-page">
+  <header class="about-header">
+    <h1>About Political Tracker</h1>
+    <p class="lead">This module lets you browse how current UK MPs and US members of Congress vote, which party they belong to, how similar members are to each other, and (for US members) a summary of campaign money.</p>
+  </header>
+
+  <section aria-labelledby="sources-heading">
+    <h2 id="sources-heading">Data sources</h2>
+    <dl class="source-list">
+      <div>
+        <dt>UK Parliament – Members API</dt>
+        <dd><a href="https://members-api.parliament.uk" target="_blank" rel="noopener">members-api.parliament.uk</a> — Current MPs, party, constituency, membership dates. Open Parliament Licence v3.0.</dd>
+      </div>
+      <div>
+        <dt>UK Parliament – Commons Votes API</dt>
+        <dd><a href="https://commonsvotes-api.parliament.uk" target="_blank" rel="noopener">commonsvotes-api.parliament.uk</a> — Division results and per-MP Aye/No records. Open Parliament Licence v3.0.</dd>
+      </div>
+      <div>
+        <dt>ONS – Westminster Parliamentary Constituencies (July 2024)</dt>
+        <dd>Generalised boundary GeoJSON. Open Government Licence v3.0.</dd>
+      </div>
+      <div>
+        <dt>Voteview (UCLA)</dt>
+        <dd><a href="https://voteview.com" target="_blank" rel="noopener">voteview.com</a> — Members, roll calls, and member votes for US House & Senate (119th Congress). Includes NOMINATE ideology scores. Free CSV downloads.</dd>
+      </div>
+      <div>
+        <dt>unitedstates/congress-legislators</dt>
+        <dd><a href="https://github.com/unitedstates/congress-legislators" target="_blank" rel="noopener">GitHub</a> — Current roster (legislators-current.yaml) with Bioguide IDs, FEC IDs, party, state/district.</dd>
+      </div>
+      <div>
+        <dt>US Census Bureau – Cartographic Boundary Files</dt>
+        <dd>State and 119th Congress district boundaries. Public domain.</dd>
+      </div>
+      <div>
+        <dt>openFEC (api.data.gov)</dt>
+        <dd><a href="https://api.data.gov" target="_blank" rel="noopener">FEC API</a> — Candidate totals by source (individual itemised, unitemised, PAC, party, self-funding), disbursements, cash on hand. Free API key required. <strong>Excludes super PAC and other outside spending.</strong></dd>
+      </div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="refresh-heading">
+    <h2 id="refresh-heading">Data freshness</h2>
+    <table class="data-table">
+      <thead>
+        <tr><th scope="col">Source</th><th scope="col">Last refreshed</th></tr>
+      </thead>
+      <tbody>
+        {% for key, value, updated in meta %}
+        <tr>
+          <td>{{ key }}</td>
+          <td>{{ updated.strftime('%d %B %Y %H:%M UTC') if updated else 'Never' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="empty">No refresh metadata available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section aria-labelledby="definitions-heading">
+    <h2 id="definitions-heading">Statistical definitions</h2>
+    <dl class="definitions">
+      <div>
+        <dt>Participation %</dt>
+        <dd>Votes cast (Aye or No) ÷ votes the member was eligible to vote in (divisions or roll calls held while they were a member).</dd>
+      </div>
+      <div>
+        <dt>Party-loyalty %</dt>
+        <dd>Among votes where the member voted Aye or No, the share in which they voted with the majority of their party at that vote. Ties and votes where the member's party had fewer than two voting members are excluded. Independents have no party-loyalty figure.</dd>
+      </div>
+      <div>
+        <dt>Agreement % (similarity)</dt>
+        <dd>Votes where both members voted Aye or No and chose the same side ÷ votes where both voted Aye or No. Pairs below 20 shared votes are hidden.</dd>
+      </div>
+      <div>
+        <dt>Similarity computation</dt>
+        <dd>Computed at ingest time for all pairs within a chamber using a members × votes matrix (+1 = Aye, −1 = No, 0 = not counted). Matrix products yield shared and agreed counts. Not computed at request time.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="limitations-heading">
+    <h2 id="limitations-heading">Limitations & caveats</h2>
+    <ul class="caveats">
+      <li><strong>Party dominates similarity:</strong> In both legislatures most votes follow party lines, so similarity is dominated by party. A high agreement score does not describe ideology.</li>
+      <li><strong>Absence ≠ abstention:</strong> Not voting is recorded separately from abstaining; only Aye/No votes count toward participation and agreement.</li>
+      <li><strong>Party switching:</strong> Where available, the party at the time of each vote is stored (UK: if exposed per division; US: from Voteview). Otherwise current party is used.</li>
+      <li><strong>US campaign finance:</strong> openFEC provides aggregate totals only. Individual donor names/addresses are not shown. Super PAC and other outside spending are excluded.</li>
+      <li><strong>UK campaign finance:</strong> No free per-MP donor breakdown is available. Electoral Commission data covers parties and some individuals; registered interests are shown as category counts only (Phase 6).</li>
+      <li><strong>Data lag:</strong> Voteview and FEC update with a delay. The "last refreshed" dates above and the latest vote date on each page indicate currency.</li>
+      <li><strong>Boundary changes:</strong> US House districts were redrawn in several states for the 2026 midterms. The 119th Congress continues until 3 Jan 2027; the 120th Congress will have new members and possibly new boundaries. Everything is keyed by Congress number.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="licence-heading">
+    <h2 id="licence-heading">Licence & attribution</h2>
+    <p>This site uses data from:</p>
+    <ul>
+      <li>UK Parliament — Open Parliament Licence v3.0</li>
+      <li>Office for National Statistics — Open Government Licence v3.0</li>
+      <li>US Census Bureau — Public domain</li>
+      <li>Voteview (UCLA) — Free for non-commercial use</li>
+      <li>FEC — Federal law restricts use of contributor information for soliciting contributions or commercial purposes. This site shows aggregate totals only.</li>
+    </ul>
+  </section>
+</div>
+{% endblock %}

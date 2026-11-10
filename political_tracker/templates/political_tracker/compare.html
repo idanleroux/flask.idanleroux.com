@@ -1,0 +1,116 @@
+{% extends "political_tracker/base.html" %}
+
+{% block title %}Compare members – Political Tracker{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('political_tracker.static', filename='compare.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="compare-page">
+  <header class="compare-header">
+    <h1>Compare two members</h1>
+    <p class="muted">Select two members to see their voting agreement and differences.</p>
+  </header>
+
+  <form class="compare-form" method="get" action="">
+    <div class="compare-selectors">
+      <div class="selector">
+        <label for="member-a">Member A</label>
+        <div class="search-input-wrapper">
+          <input type="search" id="member-a" name="a" placeholder="Search {{ 'Bioguide ID' if country == 'US' else 'Member ID' }} or name…"
+                 value="{{ request.args.get('a', '') }}" autocomplete="off" aria-describedby="member-a-hint">
+          <div id="member-a-hint" class="search-results" hidden aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="selector">
+        <label for="member-b">Member B</label>
+        <div class="search-input-wrapper">
+          <input type="search" id="member-b" name="b" placeholder="Search {{ 'Bioguide ID' if country == 'US' else 'Member ID' }} or name…"
+                 value="{{ request.args.get('b', '') }}" autocomplete="off" aria-describedby="member-b-hint">
+          <div id="member-b-hint" class="search-results" hidden aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+    <button type="submit" class="btn btn--primary">Compare</button>
+    <a href="{{ url_for('political_tracker.us_overview' if country == 'US' else 'political_tracker.uk_overview') }}" class="btn btn--secondary">Back to list</a>
+  </form>
+
+  {% if error %}
+  <div class="compare-error">{{ error }}</div>
+  {% endif %}
+
+  {% if member_a and member_b %}
+  <section class="compare-results" aria-labelledby="compare-heading">
+    <h2 id="compare-heading">{{ member_a.name }} vs {{ member_b.name }}</h2>
+
+    <div class="compare-summary">
+      <div class="compare-member">
+        <h3>{{ member_a.name }}</h3>
+        <p><span class="party-badge" style="--party-colour: {{ party_colour(member_a.party) }}">{{ member_a.party }}</span> {{ member_a.place }}</p>
+      </div>
+
+      {% if similarity %}
+      <div class="compare-agreement">
+        <div class="agreement-bar" role="img" aria-label="Agreement: {{ '%.1f'|format(similarity[2]) }}%, Disagreement: {{ '%.1f'|format(100 - similarity[2]) }}%">
+          <div class="agreement-bar__agree" style="width: {{ similarity[2] }}%"></div>
+          <div class="agreement-bar__disagree" style="width: {{ 100 - similarity[2] }}%"></div>
+        </div>
+        <dl class="agreement-stats">
+          <dt>Agreement</dt>
+          <dd>{{ '%.1f'|format(similarity[2]) }}%</dd>
+          <dt>Shared votes</dt>
+          <dd>{{ similarity[0] }}</dd>
+          <dt>Agreed votes</dt>
+          <dd>{{ similarity[1] }}</dd>
+        </dl>
+      </div>
+      {% else %}
+      <div class="compare-agreement">
+        <p class="muted">Insufficient shared votes (minimum 20) to calculate agreement.</p>
+      </div>
+      {% endif %}
+
+      <div class="compare-member">
+        <h3>{{ member_b.name }}</h3>
+        <p><span class="party-badge" style="--party-colour: {{ party_colour(member_b.party) }}">{{ member_b.party }}</span> {{ member_b.place }}</p>
+      </div>
+    </div>
+
+    {% if differing_votes %}
+    <h3>Votes where they differed</h3>
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Title</th>
+            <th scope="col">{{ member_a.name }}</th>
+            <th scope="col">{{ member_b.name }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in differing_votes %}
+          <tr>
+            <td class="date">{{ v.vote_date.strftime('%d %b %Y') }}</td>
+            <td>{{ v.title }}</td>
+            <td><span class="vote-position vote-position--{{ 'aye' if v.pos_a == 1 else 'no' }}">{{ 'Aye' if v.pos_a == 1 else 'No' }}</span></td>
+            <td><span class="vote-position vote-position--{{ 'aye' if v.pos_b == 1 else 'no' }}">{{ 'Aye' if v.pos_b == 1 else 'No' }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">No differing votes found (or insufficient shared votes).</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+
+{% block extra_scripts %}
+<script>
+const API_URL = '{{ url_for("political_tracker.us_members_api" if country == "US" else "political_tracker.uk_members_api") }}';
+initCompareSearch(API_URL, '{{ country }}');
+</script>
+{% endblock %}

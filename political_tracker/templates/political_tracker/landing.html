@@ -1,0 +1,42 @@
+{% extends "political_tracker/base.html" %}
+
+{% block title %}Political Tracker{% endblock %}
+
+{% block content %}
+<div class="landing">
+  <header class="landing-header">
+    <h1>Political Tracker</h1>
+    <p class="landing-tagline">Browse voting records, party loyalty, and similarity for current UK MPs and US members of Congress.</p>
+  </header>
+
+  <div class="landing-panels">
+    <a href="{{ url_for('political_tracker.us_overview') }}" class="landing-panel">
+      <div class="panel-icon" aria-hidden="true">🇺🇸</div>
+      <h2>US Congress</h2>
+      <p class="panel-desc">119th Congress — House & Senate</p>
+      <dl class="panel-stats">
+        <dt>Current members</dt>
+        <dd>{{ us_stats.current_members or '—' }}</dd>
+        <dt>Data last updated</dt>
+        <dd>{{ us_stats.last_updated.strftime('%d %B %Y') if us_stats.last_updated else '—' }}</dd>
+      </dl>
+    </a>
+
+    <a href="{{ url_for('political_tracker.uk_overview') }}" class="landing-panel">
+      <div class="panel-icon" aria-hidden="true">🇬🇧</div>
+      <h2>British Parliament</h2>
+      <p class="panel-desc">Current House of Commons (elected 4 July 2024)</p>
+      <dl class="panel-stats">
+        <dt>Current MPs</dt>
+        <dd>{{ uk_stats.current_members or '—' }}</dd>
+        <dt>Data last updated</dt>
+        <dd>{{ uk_stats.last_updated.strftime('%d %B %Y') if uk_stats.last_updated else '—' }}</dd>
+      </dl>
+    </a>
+  </div>
+
+  <footer class="landing-footer">
+    <a href="{{ url_for('political_tracker.about') }}" class="link link--quiet">About this data &rarr;</a>
+  </footer>
+</div>
+{% endblock %}

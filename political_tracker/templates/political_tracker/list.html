@@ -1,0 +1,211 @@
+{% extends "political_tracker/base.html" %}
+
+{% block title %}
+{% if country == 'US' %}US Congress{% else %}UK Parliament{% endif %} – Political Tracker
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('political_tracker.static', filename='list.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="overview">
+  <header class="overview-header">
+    <h1>
+      {% if country == 'US' %}
+        US Congress – {% if chamber == 'house' %}House of Representatives{% else %}Senate{% endif %}
+      {% else %}
+        UK Parliament – House of Commons
+      {% endif %}
+    </h1>
+    <p class="overview-subtitle">
+      {% if country == 'US' %}
+        119th Congress • {{ pagination.total }} {% if chamber == 'house' %}Representatives{% else %}Senators{% endif %}
+      {% else %}
+        Current Parliament • {{ pagination.total }} MPs
+      {% endif %}
+    </p>
+  </header>
+
+  {% if country == 'US' %}
+  <nav class="chamber-tabs" aria-label="Chamber selection">
+    <a href="{{ url_for('political_tracker.us_overview', chamber='house', view=view, **request.args) }}"
+       class="tab {% if chamber == 'house' %}tab--active{% endif %}">House</a>
+    <a href="{{ url_for('political_tracker.us_overview', chamber='senate', view=view, **request.args) }}"
+       class="tab {% if chamber == 'senate' %}tab--active{% endif %}">Senate</a>
+  </nav>
+  {% endif %}
+
+  <div class="overview-toolbar">
+    <div class="view-toggle" role="group" aria-label="View mode">
+      <a href="{{ url_for(request.endpoint, view='map', **request.args) }}"
+         class="btn btn--toggle {% if view == 'map' %}btn--active{% endif %}"
+         aria-pressed="{{ view == 'map' }}">Map</a>
+      <a href="{{ url_for(request.endpoint, view='list', **request.args) }}"
+         class="btn btn--toggle {% if view == 'list' %}btn--active{% endif %}"
+         aria-pressed="{{ view == 'list' }}">List</a>
+    </div>
+
+    <form class="filters" method="get" action="">
+      <input type="hidden" name="chamber" value="{{ chamber }}">
+      <input type="hidden" name="view" value="{{ view }}">
+
+      <div class="filter-group">
+        <label for="search" class="visually-hidden">Search by name</label>
+        <input type="search" id="search" name="q" placeholder="Search by name…" value="{{ request.args.get('q', '') }}">
+      </div>
+
+      <div class="filter-group">
+        <label for="party" class="visually-hidden">Filter by party</label>
+        <select id="party" name="party">
+          <option value="">All parties</option>
+          {% for p in parties %}
+          <option value="{{ p }}" {% if current_filters.party == p %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if country == 'US' %}
+      <div class="filter-group">
+        <label for="state" class="visually-hidden">Filter by state</label>
+        <select id="state" name="state">
+          <option value="">All states</option>
+          {% for s in states %}
+          <option value="{{ s }}" {% if current_filters.state == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% else %}
+      <div class="filter-group">
+        <label for="nation" class="visually-hidden">Filter by nation/region</label>
+        <select id="nation" name="nation">
+          <option value="">All nations</option>
+          {% for n in nations %}
+          <option value="{{ n }}" {% if current_filters.nation == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <div class="filter-group">
+        <label class="checkbox-inline">
+          <input type="checkbox" name="current" value="1" {% if current_filters.current %}checked{% endif %}>
+          <span>Current members only</span>
+        </label>
+      </div>
+
+      <div class="filter-group">
+        <label for="sort" class="visually-hidden">Sort by</label>
+        <select id="sort" name="sort">
+          <option value="name" {% if current_filters.sort == 'name' %}selected{% endif %}>Name</option>
+          {% if country == 'US' %}
+          <option value="state" {% if current_filters.sort == 'state' %}selected{% endif %}>State</option>
+          {% else %}
+          <option value="constituency" {% if current_filters.sort == 'constituency' %}selected{% endif %}>Constituency</option>
+          {% endif %}
+          <option value="participation" {% if current_filters.sort == 'participation' %}selected{% endif %}>Participation %</option>
+          {% if country == 'US' %}
+          <option value="loyalty" {% if current_filters.sort == 'loyalty' %}selected{% endif %}>Party loyalty %</option>
+          {% else %}
+          <option value="against_party" {% if current_filters.sort == 'against_party' %}selected{% endif %}>Votes vs party</option>
+          {% endif %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn--primary">Apply</button>
+      <a href="{{ url_for(request.endpoint, chamber=chamber, view=view) }}" class="btn btn--secondary">Clear</a>
+    </form>
+  </div>
+
+  {% if view == 'map' %}
+  <div class="map-container" id="map-container" data-country="{{ country }}" data-chamber="{{ chamber }}">
+    <div class="map-loading" aria-live="polite">Loading map…</div>
+    <div class="map-wrapper">
+      <svg class="map-svg" id="map-svg" role="img" aria-label="{% if country == 'US' %}{% if chamber == 'house' %}US House districts{% else %}US states{% endif %}{% else %}UK constituencies{% endif %} coloured by party"></svg>
+    </div>
+    <div class="map-legend" id="map-legend" aria-hidden="true"></div>
+    <div class="map-panel" id="map-panel" hidden aria-live="polite"></div>
+  </div>
+  {% else %}
+  <div class="table-wrapper">
+    <table class="data-table" aria-describedby="table-caption">
+      <caption id="table-caption" class="visually-hidden">
+        {% if country == 'US' %}{{ chamber|title }}{% else %}MPs{% endif %} list
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Party</th>
+          {% if country == 'US' %}
+          <th scope="col">State</th>
+          <th scope="col">District</th>
+          {% else %}
+          <th scope="col">Nation</th>
+          <th scope="col">Constituency</th>
+          {% endif %}
+          <th scope="col" class="num">Participation</th>
+          {% if country == 'US' %}
+          <th scope="col" class="num">Loyalty</th>
+          {% else %}
+          <th scope="col" class="num">Vs party</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+        <tr>
+          <td>
+            <a href="{{ url_for('political_tracker.us_member' if country == 'US' else 'political_tracker.uk_member', source_id=m[1] if country == 'US' else m[0]) }}"
+               class="member-link">{{ m[2] }}</a>
+          </td>
+          <td>
+            <span class="party-badge" style="--party-colour: {{ party_colour(m[3]) }}">{{ m[3] }}</span>
+          </td>
+          {% if country == 'US' %}
+          <td>{{ m[5] }}</td>
+          <td>{{ m[6] or '—' }}</td>
+          {% else %}
+          <td>{{ m[5] or '—' }}</td>
+          <td>{{ m[6] or '—' }}</td>
+          {% endif %}
+          <td class="num">{{ '%.1f'|format(m[11]) if m[11] is not none else '—' }}%</td>
+          {% if country == 'US' %}
+          <td class="num">{{ '%.1f'|format(m[13]) if m[13] is not none else '—' }}%</td>
+          {% else %}
+          <td class="num">{{ m[13] if m[13] is not none else '—' }}</td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No members match the current filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pagination.total_pages > 1 %}
+  <nav class="pagination" aria-label="Pagination">
+    {% if pagination.page > 1 %}
+    <a href="{{ url_for(request.endpoint, page=pagination.page-1, **request.args) }}" class="btn btn--secondary">Previous</a>
+    {% endif %}
+    <span class="pagination-info">
+      Page {{ pagination.page }} of {{ pagination.total_pages }} ({{ pagination.total }} total)
+    </span>
+    {% if pagination.page < pagination.total_pages %}
+    <a href="{{ url_for(request.endpoint, page=pagination.page+1, **request.args) }}" class="btn btn--secondary">Next</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if view == 'map' %}
+<script src="{{ url_for('political_tracker.static', filename='map.js') }}"></script>
+<script>
+  const MAP_API_URL = '{{ url_for("political_tracker.us_map_api" if country == "US" else "political_tracker.uk_map_api", chamber=chamber if country == "US" else "") }}';
+  const MAP_GEOJSON_URL = '{{ url_for("political_tracker.static", filename="maps/" + (country.lower() + "_" + (chamber if country == "US" else "constituencies") + ".geojson")) }}';
+  initMap(MAP_API_URL, MAP_GEOJSON_URL, '{{ country }}', '{{ chamber }}');
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Political Tracker{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('political_tracker.static', filename='tracker.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="site-wrapper">
+    <header class="site-header">
+      <div class="container">
+        <h1 class="site-title"><a href="{{ url_for('home') }}">IdanLeRoux.com</a></h1>
+        <nav class="site-nav">
+          <a href="{{ url_for('home') }}" class="nav-link">Home</a>
+          <a href="{{ url_for('political_tracker.landing') }}" class="nav-link nav-link--active">Political Tracker</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="site-main container">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>&copy; {{ now().year }} IdanLeRoux.com. Political Tracker data from UK Parliament (Open Parliament Licence), ONS (OGL), US Census, Voteview, FEC.</p>
+      </div>
+    </footer>
+  </div>
+
+  <script src="{{ url_for('political_tracker.static', filename='tracker.js') }}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>
