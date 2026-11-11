@@ -155,7 +155,7 @@
         {% for m in members %}
         <tr>
           <td>
-            <a href="{{ url_for('political_tracker.us_member' if country == 'US' else 'political_tracker.uk_member', source_id=m[1] if country == 'US' else m[0]) }}"
+            <a href="{{ url_for('political_tracker.us_member', source_id=m[1]) if country == 'US' else url_for('political_tracker.uk_member', member_id=m[0]) }}"
                class="member-link">{{ m[2] }}</a>
           </td>
           <td>
@@ -168,7 +168,7 @@
           <td>{{ m[5] or '—' }}</td>
           <td>{{ m[6] or '—' }}</td>
           {% endif %}
-          <td class="num">{{ '%.1f'|format(m[11]) if m[11] is not none else '—' }}%</td>
+          <td class="num">{{ '%.1f'|format(m[12]) if m[12] is not none else '—' }}%</td>
           {% if country == 'US' %}
           <td class="num">{{ '%.1f'|format(m[13]) if m[13] is not none else '—' }}%</td>
           {% else %}
@@ -204,7 +204,7 @@
 <script src="{{ url_for('political_tracker.static', filename='map.js') }}"></script>
 <script>
   const MAP_API_URL = '{{ url_for("political_tracker.us_map_api" if country == "US" else "political_tracker.uk_map_api", chamber=chamber if country == "US" else "") }}';
-  const MAP_GEOJSON_URL = '{{ url_for("political_tracker.static", filename="maps/" + (country.lower() + "_" + (chamber if country == "US" else "constituencies") + ".geojson")) }}';
+  const MAP_GEOJSON_URL = '{% if country == "US" and chamber == "house" %}{{ url_for("political_tracker.static", filename="maps/us_house_districts.geojson") }}{% elif country == "US" and chamber == "senate" %}{{ url_for("political_tracker.static", filename="maps/us_states.geojson") }}{% else %}{{ url_for("political_tracker.static", filename="maps/uk_constituencies.geojson") }}{% endif %}';
   initMap(MAP_API_URL, MAP_GEOJSON_URL, '{{ country }}', '{{ chamber }}');
 </script>
 {% endif %}

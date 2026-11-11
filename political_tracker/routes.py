@@ -11,6 +11,7 @@ from flask import (
 
 from political_tracker import bp
 from political_tracker.db import get_db
+from psycopg.rows import dict_row
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,8 @@ def uk_overview():
 def us_member(source_id):
     """US member page."""
     with get_db() as db:
-        with db.cursor() as cur:
+        # Member query (dict)
+        with db.cursor(row_factory=dict_row) as cur:
             cur.execute("""
                 SELECT
                     m.id, m.source_id, m.voteview_id, m.full_name, m.display_name,
@@ -260,21 +262,16 @@ def us_member(source_id):
             """, (source_id,))
             member = cur.fetchone()
 
-    if not member:
-        abort(404)
+        if not member:
+            abort(404)
 
-    # Convert to dict for easier template access
-    cols = [d[0] for d in cur.description] if cur.description else []
-    member = dict(zip(cols, member)) if cols else {}
+        # Voting record (dict)
+        page = max(1, int(request.args.get("page", "1")))
+        per_page = 25
+        position_filter = request.args.get("position")
+        against_party = request.args.get("against_party") == "1"
 
-    # Voting record - paginated
-    page = max(1, int(request.args.get("page", "1")))
-    per_page = 25
-    position_filter = request.args.get("position")
-    against_party = request.args.get("against_party") == "1"
-
-    with get_db() as db:
-        with db.cursor() as cur:
+        with db.cursor(row_factory=dict_row) as cur:
             where = ["mv.member_id = %s"]
             params = [member["id"]]
 
@@ -287,7 +284,7 @@ def us_member(source_id):
             where_sql = " AND ".join(where)
 
             cur.execute(f"SELECT COUNT(*) FROM political_tracker.member_votes mv JOIN political_tracker.votes v ON v.id = mv.vote_id WHERE {where_sql}", params)
-            total_votes = cur.fetchone()[0]
+            total_votes = cur.fetchone()['count']
 
             cur.execute(f"""
                 SELECT
@@ -302,7 +299,8 @@ def us_member(source_id):
             """, params + [per_page, (page - 1) * per_page])
             votes = cur.fetchall()
 
-            # Similar members
+        # Similar members (tuples - template accesses by index)
+        with db.cursor() as cur:
             cur.execute("""
                 SELECT
                     m2.id, m2.display_name, m2.party, m2.state_or_nation,
@@ -315,6 +313,7 @@ def us_member(source_id):
             """, (member["id"],))
             most_similar = cur.fetchall()
 
+        with db.cursor() as cur:
             cur.execute("""
                 SELECT
                     m2.id, m2.display_name, m2.party, m2.state_or_nation,
@@ -345,12 +344,15 @@ def us_member(source_id):
 def uk_member(member_id):
     """UK member page."""
     with get_db() as db:
-        with db.cursor() as cur:
+        # Member query (dict)
+        with db.cursor(row_factory=dict_row) as cur:
             cur.execute("""
                 SELECT
                     m.id, m.source_id, m.full_name, m.display_name,
                     m.party, m.party_code, m.state_or_nation, m.district_or_constituency,
                     m.ons_code, m.start_date, m.is_current,
+                    NULL AS voteview_id, NULL AS image_url, NULL AS ideology_score,
+                    NULL AS fec_candidate_id, NULL AS congress_or_parliament,
                     ms.votes_eligible, ms.votes_cast, ms.participation_pct,
                     ms.votes_against_party_count
                 FROM political_tracker.members m
@@ -359,19 +361,16 @@ def uk_member(member_id):
             """, (member_id,))
             member = cur.fetchone()
 
-    if not member:
-        abort(404)
+        if not member:
+            abort(404)
 
-    cols = [d[0] for d in cur.description] if cur.description else []
-    member = dict(zip(cols, member)) if cols else {}
+        # Voting record (dict)
+        page = max(1, int(request.args.get("page", "1")))
+        per_page = 25
+        position_filter = request.args.get("position")
+        against_party = request.args.get("against_party") == "1"
 
-    page = max(1, int(request.args.get("page", "1")))
-    per_page = 25
-    position_filter = request.args.get("position")
-    against_party = request.args.get("against_party") == "1"
-
-    with get_db() as db:
-        with db.cursor() as cur:
+        with db.cursor(row_factory=dict_row) as cur:
             where = ["mv.member_id = %s"]
             params = [member_id]
 
@@ -384,7 +383,7 @@ def uk_member(member_id):
             where_sql = " AND ".join(where)
 
             cur.execute(f"SELECT COUNT(*) FROM political_tracker.member_votes mv JOIN political_tracker.votes v ON v.id = mv.vote_id WHERE {where_sql}", params)
-            total_votes = cur.fetchone()[0]
+            total_votes = cur.fetchone()['count']
 
             cur.execute(f"""
                 SELECT
@@ -399,6 +398,8 @@ def uk_member(member_id):
             """, params + [per_page, (page - 1) * per_page])
             votes = cur.fetchall()
 
+        # Similar members (tuples - template accesses by index)
+        with db.cursor() as cur:
             cur.execute("""
                 SELECT
                     m2.id, m2.display_name, m2.party, m2.district_or_constituency,
@@ -411,6 +412,7 @@ def uk_member(member_id):
             """, (member_id,))
             most_similar = cur.fetchall()
 
+        with db.cursor() as cur:
             cur.execute("""
                 SELECT
                     m2.id, m2.display_name, m2.party, m2.district_or_constituency,

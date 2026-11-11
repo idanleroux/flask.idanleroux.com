@@ -130,11 +130,19 @@
     {% if vote_pagination.total_pages > 1 %}
     <nav class="pagination" aria-label="Vote pagination">
       {% if vote_pagination.page > 1 %}
-      <a href="{{ url_for(request.endpoint, **merge_args(page=vote_pagination.page-1)) }}" class="btn btn--secondary">Previous</a>
+      {% if country == 'US' %}
+      <a href="{{ url_for(request.endpoint, source_id=member.source_id, page=vote_pagination.page-1) }}" class="btn btn--secondary">Previous</a>
+      {% else %}
+      <a href="{{ url_for(request.endpoint, member_id=member.id, page=vote_pagination.page-1) }}" class="btn btn--secondary">Previous</a>
+      {% endif %}
       {% endif %}
       <span class="pagination-info">Page {{ vote_pagination.page }} of {{ vote_pagination.total_pages }} ({{ vote_pagination.total }} votes)</span>
       {% if vote_pagination.page < vote_pagination.total_pages %}
-      <a href="{{ url_for(request.endpoint, **merge_args(page=vote_pagination.page+1)) }}" class="btn btn--secondary">Next</a>
+      {% if country == 'US' %}
+      <a href="{{ url_for(request.endpoint, source_id=member.source_id, page=vote_pagination.page+1) }}" class="btn btn--secondary">Next</a>
+      {% else %}
+      <a href="{{ url_for(request.endpoint, member_id=member.id, page=vote_pagination.page+1) }}" class="btn btn--secondary">Next</a>
+      {% endif %}
       {% endif %}
     </nav>
     {% endif %}
