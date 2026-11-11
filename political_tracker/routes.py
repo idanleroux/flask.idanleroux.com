@@ -1,5 +1,7 @@
 """Political Tracker page routes."""
 
+import logging
+
 from flask import (
     render_template,
     request,
@@ -9,6 +11,8 @@ from flask import (
 
 from political_tracker import bp
 from political_tracker.db import get_db
+
+logger = logging.getLogger(__name__)
 
 
 @bp.get("/political_tracker")
@@ -31,8 +35,8 @@ def landing():
                 stats = {row[0]: {"current_members": row[1], "last_updated": row[2]} for row in cur.fetchall()}
                 us_stats = stats.get("US", us_stats)
                 uk_stats = stats.get("UK", uk_stats)
-    except Exception:
-        # Database not available - show placeholder data
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for landing page stats: %s", exc)
         pass
 
     return render_template(
@@ -115,8 +119,8 @@ def us_overview():
 
                 cur.execute("SELECT DISTINCT state_or_nation FROM political_tracker.members WHERE country = 'US' AND chamber = %s AND state_or_nation IS NOT NULL ORDER BY state_or_nation", (chamber,))
                 states = [r[0] for r in cur.fetchall()]
-    except Exception:
-        # Database not available - show empty state
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for US overview: %s", exc)
         pass
 
     total_pages = (total + per_page - 1) // per_page
@@ -208,8 +212,8 @@ def uk_overview():
 
                 cur.execute("SELECT DISTINCT state_or_nation FROM political_tracker.members WHERE country = 'UK' AND chamber = 'commons' AND state_or_nation IS NOT NULL ORDER BY state_or_nation")
                 nations = [r[0] for r in cur.fetchall()]
-    except Exception:
-        # Database not available - show empty state
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for UK overview: %s", exc)
         pass
 
     total_pages = (total + per_page - 1) // per_page
@@ -549,7 +553,8 @@ def about():
             with db.cursor() as cur:
                 cur.execute("SELECT key, value, updated_at FROM political_tracker.meta ORDER BY key")
                 meta = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for about page: %s", exc)
         pass
 
     return render_template("political_tracker/about.html", meta=meta)
@@ -584,7 +589,8 @@ def us_members_api():
                     LIMIT %s
                 """, params + [limit])
                 results = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for US members API: %s", exc)
         pass
 
     return {
@@ -616,7 +622,8 @@ def uk_members_api():
                     LIMIT %s
                 """, (f"%{q}%", limit))
                 results = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for UK members API: %s", exc)
         pass
 
     return {
@@ -650,7 +657,8 @@ def us_map_api(chamber):
                         WHERE m.country = 'US' AND m.chamber = 'senate' AND m.is_current
                     """)
                 results = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for US map API: %s", exc)
         pass
 
     return {
@@ -674,7 +682,8 @@ def uk_map_api():
                     WHERE m.country = 'UK' AND m.chamber = 'commons' AND m.is_current
                 """)
                 results = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        current_app.logger.warning("Database unavailable for UK map API: %s", exc)
         pass
 
     return {
