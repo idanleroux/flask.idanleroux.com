@@ -130,11 +130,11 @@
     {% if vote_pagination.total_pages > 1 %}
     <nav class="pagination" aria-label="Vote pagination">
       {% if vote_pagination.page > 1 %}
-      <a href="{{ url_for(request.endpoint, page=vote_pagination.page-1, **request.args) }}" class="btn btn--secondary">Previous</a>
+      <a href="{{ url_for(request.endpoint, **merge_args(page=vote_pagination.page-1)) }}" class="btn btn--secondary">Previous</a>
       {% endif %}
       <span class="pagination-info">Page {{ vote_pagination.page }} of {{ vote_pagination.total_pages }} ({{ vote_pagination.total }} votes)</span>
       {% if vote_pagination.page < vote_pagination.total_pages %}
-      <a href="{{ url_for(request.endpoint, page=vote_pagination.page+1, **request.args) }}" class="btn btn--secondary">Next</a>
+      <a href="{{ url_for(request.endpoint, **merge_args(page=vote_pagination.page+1)) }}" class="btn btn--secondary">Next</a>
       {% endif %}
     </nav>
     {% endif %}

@@ -1,19 +1,25 @@
 """UK Parliament data ingest — Phase 2.
 
 Fetches current Commons members and divisions from Parliament APIs.
-"""
 
+Run:
+    python -m political_tracker.ingest.uk
+"""
 from __future__ import annotations
 
+import argparse
+import logging
 import os
 import sys
 import time
-import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
 import requests
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Load .env file
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -32,9 +38,30 @@ VOTES_API = "https://commonsvotes-api.parliament.uk/api/v1"
 CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Default scope: current Parliament (since 9 July 2024)
+DEFAULT_MAX_DIVISIONS = int(os.environ.get("UK_MAX_DIVISIONS", "0"))  # 0 = all
+
+
+def build_session() -> requests.Session:
+    """Build a requests session with polite retry logic."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=2.0,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("GET",),
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+SESSION = build_session()
+
 
 def fetch_with_cache(url, params=None, cache_name=None):
-    """Fetch URL with disk cache for resumability."""
+    """Fetch URL with disk cache, retries, and polite rate limiting."""
     if cache_name:
         cache_file = CACHE_DIR / f"{cache_name}.json"
         if cache_file.exists():
@@ -43,7 +70,7 @@ def fetch_with_cache(url, params=None, cache_name=None):
             return json.loads(cache_file.read_text())
 
     headers = {"Accept": "application/json"}
-    resp = requests.get(url, params=params, headers=headers, timeout=30)
+    resp = SESSION.get(url, params=params, headers=headers, timeout=30)
     resp.raise_for_status()
     data = resp.json()
 
@@ -96,8 +123,12 @@ def ingest_members():
     return all_members
 
 
-def ingest_votes(members_by_source_id):
-    """Fetch all divisions since start of current Parliament (9 July 2024)."""
+def ingest_votes(members_by_source_id, max_divisions=DEFAULT_MAX_DIVISIONS):
+    """Fetch all divisions since start of current Parliament (9 July 2024).
+
+    Args:
+        max_divisions: Maximum number of recent divisions to load (0 = all).
+    """
     log.info("Fetching UK votes...")
     
     # Get all divisions since Parliament start
@@ -118,6 +149,10 @@ def ingest_votes(members_by_source_id):
         if len(items) < params["take"]:
             break
         params["skip"] += params["take"]
+        # Stop if we've reached the max_divisions limit
+        if max_divisions > 0 and len(all_divisions) >= max_divisions:
+            all_divisions = all_divisions[:max_divisions]
+            break
     
     log.info("Fetched %d divisions, fetching details...", len(all_divisions))
     
@@ -236,8 +271,7 @@ def upsert_votes(conn, votes):
                     question = EXCLUDED.question,
                     result = EXCLUDED.result,
                     ayes = EXCLUDED.ayes,
-                    noes = EXCLUDED.noes,
-                    updated_at = NOW()
+                    noes = EXCLUDED.noes
             """, (
                 v["source_vote_id"], v["vote_date"], v["title"], v["question"],
                 v["result"], v["ayes"], v["noes"], v["session_or_congress"]
@@ -321,9 +355,49 @@ def upsert_member_votes(conn, member_votes, members_by_source_id):
     log.info("Upserted member_votes for %d votes", len(vote_map))
 
 
-def run():
-    """Main entry point for UK ingest."""
-    log.info("Starting UK ingest...")
+def check_vote_integrity(conn):
+    """Fail loudly if any member_votes.vote_id has no matching votes row.
+
+    Checks UK commons parliament 59 rows.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT count(*)
+            FROM political_tracker.member_votes mv
+            JOIN political_tracker.members m ON m.id = mv.member_id
+            WHERE m.country = 'UK' AND m.chamber = 'commons' AND m.congress_or_parliament = 59
+              AND NOT EXISTS (
+                  SELECT 1 FROM political_tracker.votes v
+                  WHERE v.id = mv.vote_id
+                    AND v.country = 'UK' AND v.chamber = 'commons' AND v.session_or_congress = 59
+              )
+        """)
+        orphaned = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT count(*) FROM political_tracker.member_votes mv
+            JOIN political_tracker.members m ON m.id = mv.member_id
+            WHERE m.country = 'UK' AND m.chamber = 'commons' AND m.congress_or_parliament = 59
+        """)
+        total = cur.fetchone()[0]
+
+    if orphaned > 0:
+        log.error("INTEGRITY FAILURE: %d of %d member_votes rows have no matching votes row",
+                  orphaned, total)
+        return False
+
+    log.info("Integrity check passed: %d/%d member_votes rows reference valid votes",
+             total, total)
+    return True
+
+
+def run(max_divisions=DEFAULT_MAX_DIVISIONS):
+    """Main entry point for UK ingest.
+
+    Args:
+        max_divisions: Maximum number of recent divisions to load (0 = all).
+    """
+    log.info("Starting UK ingest (max_divisions=%s)...", max_divisions or "all")
 
     # Use DATABASE_URL_INGEST for write access
     dsn = os.environ.get("DATABASE_URL_INGEST")
@@ -335,28 +409,33 @@ def run():
     try:
         members = ingest_members()
         upsert_members(conn, members)
-        
+
         # Build member lookup
         members_by_source_id = {m["source_id"]: m for m in members}
-        
+
         # Fetch and upsert votes
-        votes, member_votes = ingest_votes(members_by_source_id)
+        votes, member_votes = ingest_votes(members_by_source_id, max_divisions=max_divisions)
         if votes:
             upsert_votes(conn, votes)
             upsert_member_votes(conn, member_votes, members_by_source_id)
-        
+
+            # Integrity check
+            if not check_vote_integrity(conn):
+                log.error("Aborting due to vote integrity failure")
+                sys.exit(1)
+
         # Update meta
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO political_tracker.meta (key, value, updated_at)
                 VALUES ('uk_members_last_refresh', %s, NOW())
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-            """, (datetime.utcnow().isoformat(),))
+            """, (datetime.now(timezone.utc).isoformat(),))
             cur.execute("""
                 INSERT INTO political_tracker.meta (key, value, updated_at)
                 VALUES ('uk_votes_last_refresh', %s, NOW())
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-            """, (datetime.utcnow().isoformat(),))
+            """, (datetime.now(timezone.utc).isoformat(),))
             conn.commit()
 
         log.info("UK ingest complete")
@@ -364,6 +443,13 @@ def run():
         conn.close()
 
 
+def main():
+    parser = argparse.ArgumentParser(description="UK Parliament data ingest")
+    parser.add_argument("--max-divisions", type=int, default=DEFAULT_MAX_DIVISIONS,
+                        help="Maximum number of recent divisions to load (0 = all, default: %(default)s)")
+    args = parser.parse_args()
+    run(max_divisions=args.max_divisions)
+
+
 if __name__ == "__main__":
-    from datetime import datetime
-    run()
+    main()
