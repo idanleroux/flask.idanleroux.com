@@ -18,8 +18,8 @@ const PARTY_COLOURS = {
   'Independent': '#8d98ad',
   // US
   'Democratic': '#4a90e2',
-  'Republican': '#e5484d',
   'Democrat': '#4a90e2',
+  'Republican': '#e5484d',
   'GOP': '#e5484d',
 };
 
@@ -54,18 +54,31 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
   panel.hidden = true;
 
   try {
+    // Check D3 is loaded
+    if (typeof d3 === 'undefined') {
+      throw new Error('D3 library not loaded');
+    }
+
     // Load both in parallel
     const [geoRes, apiRes] = await Promise.all([
       fetch(geojsonUrl),
       fetch(apiUrl)
     ]);
 
-    if (!geoRes.ok) throw new Error(`GeoJSON load failed: ${geoRes.status}`);
-    if (!apiRes.ok) throw new Error(`API load failed: ${apiRes.status}`);
+    if (!geoRes.ok) throw new Error(`GeoJSON load failed: ${geoRes.status} ${geoRes.statusText}`);
+    if (!apiRes.ok) throw new Error(`API load failed: ${apiRes.status} ${apiRes.statusText}`);
 
     geojsonData = await geoRes.json();
     const apiData = await apiRes.json();
     memberData = apiData.features || [];
+
+    if (!geojsonData || !geojsonData.features) {
+      throw new Error('Invalid GeoJSON: missing features');
+    }
+
+    if (!memberData.length) {
+      throw new Error('No member data returned from API');
+    }
 
     // Build lookup: id -> party
     const partyById = {};
@@ -73,14 +86,13 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
       partyById[m.id] = m.party;
     });
 
-    // Set up SVG
+    // Set up SVG with guaranteed dimensions
     const svgNode = svg.node();
     let width = svgNode.clientWidth || 600;
     let height = svgNode.clientHeight || 400;
 
-    if (!svgNode.getAttribute('width') || !svgNode.getAttribute('height')) {
-      svg.attr('width', width).attr('height', height);
-    }
+    // Always set explicit width/height as inline styles so D3 can compute projections
+    svg.attr('width', width).attr('height', height);
 
     // Projection based on country/chamber
     projection = createProjection(country, chamber, width, height);
@@ -137,7 +149,7 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
 
   } catch (err) {
     console.error('Map init failed:', err);
-    loading.textContent = 'Failed to load map. See console for details.';
+    loading.textContent = `Failed to load map: ${err.message}`;
   }
 }
 
