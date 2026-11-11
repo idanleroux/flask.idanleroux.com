@@ -103,11 +103,14 @@
           {% else %}
           <option value="constituency" {% if current_filters.sort == 'constituency' %}selected{% endif %}>Constituency</option>
           {% endif %}
-          <option value="participation" {% if current_filters.sort == 'participation' %}selected{% endif %}>Participation %</option>
+          <option value="participation_desc" {% if current_filters.sort == 'participation_desc' %}selected{% endif %}>Participation % (high → low)</option>
+          <option value="participation_asc" {% if current_filters.sort == 'participation_asc' %}selected{% endif %}>Participation % (low → high)</option>
           {% if country == 'US' %}
-          <option value="loyalty" {% if current_filters.sort == 'loyalty' %}selected{% endif %}>Party loyalty %</option>
+          <option value="loyalty_desc" {% if current_filters.sort == 'loyalty_desc' %}selected{% endif %}>Party loyalty % (high → low)</option>
+          <option value="loyalty_asc" {% if current_filters.sort == 'loyalty_asc' %}selected{% endif %}>Party loyalty % (low → high)</option>
           {% else %}
-          <option value="against_party" {% if current_filters.sort == 'against_party' %}selected{% endif %}>Votes vs party</option>
+          <option value="against_party_desc" {% if current_filters.sort == 'against_party_desc' %}selected{% endif %}>Votes vs party (high → low)</option>
+          <option value="against_party_asc" {% if current_filters.sort == 'against_party_asc' %}selected{% endif %}>Votes vs party (low → high)</option>
           {% endif %}
         </select>
       </div>

@@ -94,8 +94,10 @@ def us_overview():
                 order_map = {
                     "name": "display_name",
                     "state": "state_or_nation, display_name",
-                    "participation": "ms.participation_pct DESC NULLS LAST",
-                    "loyalty": "ms.party_loyalty_pct DESC NULLS LAST",
+                    "participation_desc": "ms.participation_pct DESC NULLS LAST",
+                    "participation_asc": "ms.participation_pct ASC NULLS LAST",
+                    "loyalty_desc": "ms.party_loyalty_pct DESC NULLS LAST",
+                    "loyalty_asc": "ms.party_loyalty_pct ASC NULLS LAST",
                 }
                 order_sql = order_map.get(sort, "display_name")
 
@@ -188,6 +190,11 @@ def uk_overview():
                 order_map = {
                     "name": "display_name",
                     "constituency": "district_or_constituency, display_name",
+                    "participation_desc": "ms.participation_pct DESC NULLS LAST",
+                    "participation_asc": "ms.participation_pct ASC NULLS LAST",
+                    "against_party_desc": "ms.votes_against_party_count DESC NULLS LAST",
+                    "against_party_asc": "ms.votes_against_party_count ASC NULLS LAST",
+                    # Backward compat
                     "participation": "ms.participation_pct DESC NULLS LAST",
                     "against_party": "ms.votes_against_party_count DESC NULLS LAST",
                 }

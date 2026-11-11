@@ -40,15 +40,16 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
   currentChamber = chamber;
 
   const container = document.getElementById('map-container');
-  const svg = document.getElementById('map-svg');
+  const svgElement = document.getElementById('map-svg');
+  const svg = d3.select(svgElement);
   const loading = container.querySelector('.map-loading');
   const legend = document.getElementById('map-legend');
   const panel = document.getElementById('map-panel');
 
-  if (!svg) return;
+  if (!svgElement) return;
 
   // Clear previous
-  svg.innerHTML = '';
+  svg.html('');
   legend.innerHTML = '';
   panel.hidden = true;
 
@@ -73,8 +74,8 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
     });
 
     // Set up SVG
-    const width = svg.clientWidth;
-    const height = svg.clientHeight;
+    const width = svg.node().clientWidth;
+    const height = svg.node().clientHeight;
 
     // Projection based on country/chamber
     projection = createProjection(country, chamber, width, height);
