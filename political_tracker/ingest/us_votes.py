@@ -241,7 +241,10 @@ def upsert_votes(conn, votes, chamber):
 
 
 def upsert_member_votes(conn, mv_votes):
-    """Full refresh: truncate and COPY fresh (no ON CONFLICT overhead)."""
+    """Full refresh of US member_votes: delete US rows then COPY fresh.
+
+    Scoped to country='US' so UK member_votes are not wiped.
+    """
     import io
     import csv
     
@@ -283,8 +286,13 @@ def upsert_member_votes(conn, mv_votes):
                 # Set statement timeout to 0 (unlimited) for this session
                 cur.execute("SET statement_timeout = 0")
                 
-                # Full refresh: truncate then COPY directly (fastest, no index overhead)
-                cur.execute("TRUNCATE political_tracker.member_votes")
+                # Full refresh: delete US member_votes then COPY fresh (no ON CONFLICT overhead).
+                # Scoped to country='US' so UK member_votes are not wiped.
+                cur.execute("""
+                    DELETE FROM political_tracker.member_votes mv
+                    USING political_tracker.votes v
+                    WHERE mv.vote_id = v.id AND v.country = 'US'
+                """)
                 
                 with cur.copy("COPY political_tracker.member_votes (vote_id, member_id, position) FROM STDIN") as copy:
                     copy.write(output.getvalue())

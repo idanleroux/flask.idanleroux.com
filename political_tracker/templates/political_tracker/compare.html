@@ -108,6 +108,8 @@
   {% endif %}
 </div>
 
+{% endblock %}
+
 {% block extra_scripts %}
 <script>
 const API_URL = '{{ url_for("political_tracker.us_members_api" if country == "US" else "political_tracker.uk_members_api") }}';

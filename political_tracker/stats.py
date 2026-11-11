@@ -164,7 +164,7 @@ def build_vote_matrix(
     """
     n_members = len(member_ids)
     n_votes = len(vote_ids)
-    matrix = np.zeros((n_members, n_votes), dtype=np.int8)
+    matrix = np.zeros((n_members, n_votes), dtype=np.int16)
 
     vote_idx = {vid: i for i, vid in enumerate(vote_ids)}
     member_idx = {mid: i for i, mid in enumerate(member_ids)}

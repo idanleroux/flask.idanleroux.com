@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -365,5 +366,4 @@ def run():
 
 
 if __name__ == "__main__":
-    from datetime import datetime
     run()

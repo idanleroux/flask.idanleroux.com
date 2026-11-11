@@ -29,19 +29,19 @@
 
   {% if country == 'US' %}
   <nav class="chamber-tabs" aria-label="Chamber selection">
-    <a href="{{ url_for('political_tracker.us_overview', chamber='house', view=view, **request.args) }}"
+    <a href="{{ url_for('political_tracker.us_overview', **merge_args(chamber='house')) }}"
        class="tab {% if chamber == 'house' %}tab--active{% endif %}">House</a>
-    <a href="{{ url_for('political_tracker.us_overview', chamber='senate', view=view, **request.args) }}"
+    <a href="{{ url_for('political_tracker.us_overview', **merge_args(chamber='senate')) }}"
        class="tab {% if chamber == 'senate' %}tab--active{% endif %}">Senate</a>
   </nav>
   {% endif %}
 
   <div class="overview-toolbar">
     <div class="view-toggle" role="group" aria-label="View mode">
-      <a href="{{ url_for(request.endpoint, view='map', **request.args) }}"
+      <a href="{{ url_for(request.endpoint, **merge_args(view='map')) }}"
          class="btn btn--toggle {% if view == 'map' %}btn--active{% endif %}"
          aria-pressed="{{ view == 'map' }}">Map</a>
-      <a href="{{ url_for(request.endpoint, view='list', **request.args) }}"
+      <a href="{{ url_for(request.endpoint, **merge_args(view='list')) }}"
          class="btn btn--toggle {% if view == 'list' %}btn--active{% endif %}"
          aria-pressed="{{ view == 'list' }}">List</a>
     </div>
@@ -185,13 +185,13 @@
   {% if pagination.total_pages > 1 %}
   <nav class="pagination" aria-label="Pagination">
     {% if pagination.page > 1 %}
-    <a href="{{ url_for(request.endpoint, page=pagination.page-1, **request.args) }}" class="btn btn--secondary">Previous</a>
+    <a href="{{ url_for(request.endpoint, **merge_args(page=pagination.page-1)) }}" class="btn btn--secondary">Previous</a>
     {% endif %}
     <span class="pagination-info">
       Page {{ pagination.page }} of {{ pagination.total_pages }} ({{ pagination.total }} total)
     </span>
     {% if pagination.page < pagination.total_pages %}
-    <a href="{{ url_for(request.endpoint, page=pagination.page+1, **request.args) }}" class="btn btn--secondary">Next</a>
+    <a href="{{ url_for(request.endpoint, **merge_args(page=pagination.page+1)) }}" class="btn btn--secondary">Next</a>
     {% endif %}
   </nav>
   {% endif %}

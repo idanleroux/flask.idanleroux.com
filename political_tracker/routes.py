@@ -566,22 +566,26 @@ def us_members_api():
     if not q or len(q) < 2:
         return {"results": []}
 
-    with get_db() as db:
-        with db.cursor() as cur:
-            where = ["country = 'US'", "is_current", "display_name ILIKE %s"]
-            params = [f"%{q}%"]
-            if chamber:
-                where.append("chamber = %s")
-                params.append(chamber)
+    results = []
+    try:
+        with get_db() as db:
+            with db.cursor() as cur:
+                where = ["country = 'US'", "is_current", "display_name ILIKE %s"]
+                params = [f"%{q}%"]
+                if chamber:
+                    where.append("chamber = %s")
+                    params.append(chamber)
 
-            cur.execute(f"""
-                SELECT source_id, display_name, party, state_or_nation, district_or_constituency, chamber
-                FROM political_tracker.members
-                WHERE {' AND '.join(where)}
-                ORDER BY display_name
-                LIMIT %s
-            """, params + [limit])
-            results = cur.fetchall()
+                cur.execute(f"""
+                    SELECT source_id, display_name, party, state_or_nation, district_or_constituency, chamber
+                    FROM political_tracker.members
+                    WHERE {' AND '.join(where)}
+                    ORDER BY display_name
+                    LIMIT %s
+                """, params + [limit])
+                results = cur.fetchall()
+    except Exception:
+        pass
 
     return {
         "results": [
@@ -600,16 +604,20 @@ def uk_members_api():
     if not q or len(q) < 2:
         return {"results": []}
 
-    with get_db() as db:
-        with db.cursor() as cur:
-            cur.execute("""
-                SELECT source_id, display_name, party, district_or_constituency, state_or_nation
-                FROM political_tracker.members
-                WHERE country = 'UK' AND is_current AND display_name ILIKE %s
-                ORDER BY display_name
-                LIMIT %s
-            """, (f"%{q}%", limit))
-            results = cur.fetchall()
+    results = []
+    try:
+        with get_db() as db:
+            with db.cursor() as cur:
+                cur.execute("""
+                    SELECT source_id, display_name, party, district_or_constituency, state_or_nation
+                    FROM political_tracker.members
+                    WHERE country = 'UK' AND is_current AND display_name ILIKE %s
+                    ORDER BY display_name
+                    LIMIT %s
+                """, (f"%{q}%", limit))
+                results = cur.fetchall()
+    except Exception:
+        pass
 
     return {
         "results": [
@@ -625,21 +633,25 @@ def us_map_api(chamber):
     if chamber not in ("house", "senate"):
         return {"error": "Invalid chamber"}, 400
 
-    with get_db() as db:
-        with db.cursor() as cur:
-            if chamber == "house":
-                cur.execute("""
-                    SELECT m.district_or_constituency, m.party, m.display_name, m.source_id
-                    FROM political_tracker.members m
-                    WHERE m.country = 'US' AND m.chamber = 'house' AND m.is_current
-                """)
-            else:
-                cur.execute("""
-                    SELECT m.state_or_nation, m.party, m.display_name, m.source_id
-                    FROM political_tracker.members m
-                    WHERE m.country = 'US' AND m.chamber = 'senate' AND m.is_current
-                """)
-            results = cur.fetchall()
+    results = []
+    try:
+        with get_db() as db:
+            with db.cursor() as cur:
+                if chamber == "house":
+                    cur.execute("""
+                        SELECT m.district_or_constituency, m.party, m.display_name, m.source_id
+                        FROM political_tracker.members m
+                        WHERE m.country = 'US' AND m.chamber = 'house' AND m.is_current
+                    """)
+                else:
+                    cur.execute("""
+                        SELECT m.state_or_nation, m.party, m.display_name, m.source_id
+                        FROM political_tracker.members m
+                        WHERE m.country = 'US' AND m.chamber = 'senate' AND m.is_current
+                    """)
+                results = cur.fetchall()
+    except Exception:
+        pass
 
     return {
         "features": [
@@ -652,14 +664,18 @@ def us_map_api(chamber):
 @bp.get("/political_view_UK/api/map")
 def uk_map_api():
     """JSON endpoint for UK map data (constituencies)."""
-    with get_db() as db:
-        with db.cursor() as cur:
-            cur.execute("""
-                SELECT m.ons_code, m.party, m.display_name, m.source_id
-                FROM political_tracker.members m
-                WHERE m.country = 'UK' AND m.chamber = 'commons' AND m.is_current
-            """)
-            results = cur.fetchall()
+    results = []
+    try:
+        with get_db() as db:
+            with db.cursor() as cur:
+                cur.execute("""
+                    SELECT m.ons_code, m.party, m.display_name, m.source_id
+                    FROM political_tracker.members m
+                    WHERE m.country = 'UK' AND m.chamber = 'commons' AND m.is_current
+                """)
+                results = cur.fetchall()
+    except Exception:
+        pass
 
     return {
         "features": [
