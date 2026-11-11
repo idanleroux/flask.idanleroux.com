@@ -1,19 +1,23 @@
 """US campaign finance ingest — Phase 6.
 
 Uses openFEC API to fetch candidate totals by source.
+Correct endpoint: /candidate/{candidate_id}/totals/ (ID in URL path).
 """
-
 from __future__ import annotations
 
+import argparse
+import logging
 import os
 import sys
 import time
-import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
 import requests
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Load .env file
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -27,9 +31,29 @@ FEC_BASE = "https://api.open.fec.gov/v1"
 CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+DEFAULT_CYCLES = [2022, 2024]
+
+
+def build_session() -> requests.Session:
+    """Build a requests session with polite retry logic."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=2.0,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("GET",),
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+SESSION = build_session()
+
 
 def fetch_fec(endpoint, params):
-    """Fetch from openFEC with rate limiting and caching."""
+    """Fetch from openFEC with retries, caching, and rate limiting."""
     api_key = os.environ.get("FEC_API_KEY")
     if not api_key:
         log.error("FEC_API_KEY not set")
@@ -38,19 +62,20 @@ def fetch_fec(endpoint, params):
     params = {**params, "api_key": api_key}
     url = f"{FEC_BASE}{endpoint}"
 
-    # Simple in-memory cache for this run
     cache_key = f"{endpoint}?{requests.compat.urlencode(params)}"
-    cache_file = CACHE_DIR / f"fec_{hash(cache_key)}.json"
+    cache_file = CACHE_DIR / f"fec_{abs(hash(cache_key))}.json"
 
     if cache_file.exists():
         import json
+        log.info("Cache hit: %s", cache_name := endpoint)
         return json.loads(cache_file.read_text())
 
-    resp = requests.get(url, params=params, timeout=30)
+    log.info("Fetching openFEC: %s", endpoint)
+    resp = SESSION.get(url, params=params, timeout=30)
     if resp.status_code == 429:
         log.warning("Rate limited, waiting 60s...")
         time.sleep(60)
-        resp = requests.get(url, params=params, timeout=30)
+        resp = SESSION.get(url, params=params, timeout=30)
 
     resp.raise_for_status()
     data = resp.json()
@@ -62,9 +87,11 @@ def fetch_fec(endpoint, params):
 
 
 def get_candidate_totals(fec_candidate_id, cycle):
-    """Fetch candidate totals for a cycle."""
-    data = fetch_fec("/candidate/totals/", {
-        "candidate_id": fec_candidate_id,
+    """Fetch candidate totals for a cycle.
+
+    Uses the correct openFEC endpoint: /candidate/{candidate_id}/totals/
+    """
+    data = fetch_fec(f"/candidate/{fec_candidate_id}/totals/", {
         "cycle": cycle,
         "per_page": 1,
     })
@@ -73,47 +100,53 @@ def get_candidate_totals(fec_candidate_id, cycle):
     return data["results"][0]
 
 
+# Mapping from openFEC API response fields to finance_us column names
+FIELD_MAP = {
+    "receipts": "total_receipts",
+    "individual_itemized_contributions": "individual_itemised",
+    "individual_unitemized_contributions": "individual_unitemised",
+    "other_political_committee_contributions": "pac",
+    "political_party_committee_contributions": "party_committee",
+    "candidate_contribution": "candidate_self",
+    "disbursements": "total_disbursements",
+    "last_cash_on_hand_end_period": "cash_on_hand",
+    "coverage_end_date": "coverage_end_date",
+}
+
+
 def upsert_finance(conn, member_id, cycle, totals):
     """Insert or update finance record."""
     if not totals:
         return
 
     with conn.cursor() as cur:
-        cur.execute("""
+        values = {"member_id": member_id, "cycle": cycle}
+        for api_field, col_name in FIELD_MAP.items():
+            values[col_name] = totals.get(api_field)
+
+        columns = ", ".join(values.keys())
+        placeholders = ", ".join(["%s"] * len(values))
+        update_clause = ", ".join(
+            f"{col} = EXCLUDED.{col}" for col in values.keys()
+            if col not in ("member_id", "cycle")
+        )
+
+        cur.execute(f"""
             INSERT INTO political_tracker.finance_us
-                (member_id, cycle, coverage_end_date,
-                 total_receipts, individual_itemised, individual_unitemised,
-                 pac, party_committee, candidate_self,
-                 total_disbursements, cash_on_hand)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ({columns})
+            VALUES ({placeholders})
             ON CONFLICT (member_id, cycle) DO UPDATE SET
-                coverage_end_date = EXCLUDED.coverage_end_date,
-                total_receipts = EXCLUDED.total_receipts,
-                individual_itemised = EXCLUDED.individual_itemised,
-                individual_unitemised = EXCLUDED.individual_unitemised,
-                pac = EXCLUDED.pac,
-                party_committee = EXCLUDED.party_committee,
-                candidate_self = EXCLUDED.candidate_self,
-                total_disbursements = EXCLUDED.total_disbursements,
-                cash_on_hand = EXCLUDED.cash_on_hand,
+                {update_clause},
                 updated_at = NOW()
-        """, (
-            member_id, cycle,
-            totals.get("coverage_end_date"),
-            totals.get("total_receipts"),
-            totals.get("individual_itemized_contributions"),
-            totals.get("individual_unitemized_contributions"),
-            totals.get("pac_contributions"),
-            totals.get("party_committee_contributions"),
-            totals.get("candidate_contributions"),
-            totals.get("total_disbursements"),
-            totals.get("cash_on_hand"),
-        ))
+        """, tuple(values.values()))
     conn.commit()
 
 
-def run():
-    log.info("Starting US finance ingest...")
+def run(cycles=None):
+    if cycles is None:
+        cycles = DEFAULT_CYCLES
+
+    log.info("Starting US finance ingest (cycles=%s)...", cycles)
 
     api_key = os.environ.get("FEC_API_KEY")
     if not api_key:
@@ -127,7 +160,6 @@ def run():
 
     conn = psycopg.connect(dsn, prepare_threshold=None, sslmode="require")
     try:
-        # Get all current US members with FEC IDs
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, fec_candidate_id FROM political_tracker.members
@@ -135,21 +167,22 @@ def run():
             """)
             members = cur.fetchall()
 
-        cycles = [2022, 2024]  # Two most recent cycles
+        log.info("Found %d US members with FEC candidate IDs", len(members))
 
-        for member_id, fec_id in members:
+        for i, (member_id, fec_id) in enumerate(members):
             for cycle in cycles:
-                log.info("Fetching finance for member %s cycle %d", fec_id, cycle)
                 totals = get_candidate_totals(fec_id, cycle)
                 if totals:
                     upsert_finance(conn, member_id, cycle, totals)
+            if (i + 1) % 50 == 0:
+                log.info("Processed %d/%d members", i + 1, len(members))
 
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO political_tracker.meta (key, value, updated_at)
                 VALUES ('us_finance_last_refresh', %s, NOW())
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-            """, (datetime.utcnow().isoformat(),))
+            """, (datetime.now(timezone.utc).isoformat(),))
             conn.commit()
 
         log.info("US finance ingest complete")
@@ -157,6 +190,13 @@ def run():
         conn.close()
 
 
+def main():
+    parser = argparse.ArgumentParser(description="US campaign finance ingest (openFEC)")
+    parser.add_argument("--cycles", type=int, nargs="*", default=DEFAULT_CYCLES,
+                        help="Election cycles to fetch (default: %(default)s)")
+    args = parser.parse_args()
+    run(cycles=args.cycles)
+
+
 if __name__ == "__main__":
-    from datetime import datetime
-    run()
+    main()
