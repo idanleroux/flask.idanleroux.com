@@ -74,8 +74,13 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
     });
 
     // Set up SVG
-    const width = svg.node().clientWidth;
-    const height = svg.node().clientHeight;
+    const svgNode = svg.node();
+    let width = svgNode.clientWidth || 600;
+    let height = svgNode.clientHeight || 400;
+
+    if (!svgNode.getAttribute('width') || !svgNode.getAttribute('height')) {
+      svg.attr('width', width).attr('height', height);
+    }
 
     // Projection based on country/chamber
     projection = createProjection(country, chamber, width, height);
