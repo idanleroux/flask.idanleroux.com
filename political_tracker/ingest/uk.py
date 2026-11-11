@@ -13,6 +13,10 @@ from pathlib import Path
 
 import psycopg
 import requests
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -93,11 +97,101 @@ def ingest_members():
 
 
 def ingest_votes(members_by_source_id):
-    """Fetch all divisions since start of current Parliament."""
+    """Fetch all divisions since start of current Parliament (9 July 2024)."""
     log.info("Fetching UK votes...")
-    # TODO: Implement divisions fetch from commonsvotes-api.parliament.uk
-    # This is a stub for Phase 2
-    return []
+    
+    # Get all divisions since Parliament start
+    divisions_url = "https://commonsvotes-api.parliament.uk/api/v1/Divisions"
+    params = {
+        "startDate": "2024-07-09",
+        "skip": 0,
+        "take": 100,
+    }
+    
+    all_divisions = []
+    while True:
+        data = fetch_with_cache(divisions_url, params, cache_name=f"uk_divisions_p{params['skip']//params['take']+1}")
+        items = data.get("items", [])
+        if not items:
+            break
+        all_divisions.extend(items)
+        if len(items) < params["take"]:
+            break
+        params["skip"] += params["take"]
+    
+    log.info("Fetched %d divisions, fetching details...", len(all_divisions))
+    
+    votes = []
+    member_votes = []
+    
+    for div in all_divisions:
+        div_id = div.get("divisionId") or div.get("id")
+        if not div_id:
+            continue
+            
+        # Fetch division detail with member votes
+        detail = fetch_with_cache(
+            f"https://commonsvotes-api.parliament.uk/api/v1/Divisions/{div_id}",
+            cache_name=f"uk_div_{div_id}"
+        )
+        
+        # Parse division
+        vote_date = detail.get("date") or detail.get("divisionDate")
+        if not vote_date:
+            continue
+        vote_date = vote_date[:10]  # YYYY-MM-DD
+        
+        title = detail.get("title") or detail.get("motion") or "Division"
+        result = detail.get("result") or detail.get("outcome") or ""
+        ayes = detail.get("ayes") or detail.get("ayeCount") or 0
+        noes = detail.get("noes") or detail.get("noCount") or 0
+        
+        # Get member votes
+        aye_members = detail.get("ayeMembers") or detail.get("membersAye") or []
+        no_members = detail.get("noMembers") or detail.get("membersNo") or []
+        abstain_members = detail.get("abstainMembers") or detail.get("membersAbstain") or []
+        
+        votes.append({
+            "source_vote_id": str(div_id),
+            "vote_date": vote_date,
+            "title": title,
+            "question": detail.get("description", ""),
+            "result": result,
+            "ayes": ayes,
+            "noes": noes,
+            "session_or_congress": 59,  # Current Parliament number
+        })
+        
+        # Map member votes to positions
+        for m in aye_members:
+            mid = str(m.get("memberId") or m.get("id"))
+            if mid in members_by_source_id:
+                member_votes.append({
+                    "source_vote_id": str(div_id),
+                    "member_source_id": mid,
+                    "position": 1,  # Aye
+                })
+        for m in no_members:
+            mid = str(m.get("memberId") or m.get("id"))
+            if mid in members_by_source_id:
+                member_votes.append({
+                    "source_vote_id": str(div_id),
+                    "member_source_id": mid,
+                    "position": 2,  # No
+                })
+        for m in abstain_members:
+            mid = str(m.get("memberId") or m.get("id"))
+            if mid in members_by_source_id:
+                member_votes.append({
+                    "source_vote_id": str(div_id),
+                    "member_source_id": mid,
+                    "position": 3,  # Abstain
+                })
+        
+        # Members not in any list = absent (we'll handle this in upsert)
+    
+    log.info("Parsed %d divisions with %d member votes", len(votes), len(member_votes))
+    return votes, member_votes
 
 
 def upsert_members(conn, members):
@@ -127,6 +221,106 @@ def upsert_members(conn, members):
     conn.commit()
 
 
+def upsert_votes(conn, votes):
+    """Insert or update votes in database."""
+    with conn.cursor() as cur:
+        for v in votes:
+            cur.execute("""
+                INSERT INTO political_tracker.votes
+                    (country, chamber, source_vote_id, vote_date, title, question,
+                     result, ayes, noes, session_or_congress)
+                VALUES ('UK', 'commons', %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (country, chamber, source_vote_id, session_or_congress) DO UPDATE SET
+                    vote_date = EXCLUDED.vote_date,
+                    title = EXCLUDED.title,
+                    question = EXCLUDED.question,
+                    result = EXCLUDED.result,
+                    ayes = EXCLUDED.ayes,
+                    noes = EXCLUDED.noes,
+                    updated_at = NOW()
+            """, (
+                v["source_vote_id"], v["vote_date"], v["title"], v["question"],
+                v["result"], v["ayes"], v["noes"], v["session_or_congress"]
+            ))
+    conn.commit()
+
+
+def upsert_member_votes(conn, member_votes, members_by_source_id):
+    """Insert member votes, setting absent for those not in lists."""
+    # First get vote_id and member_id mappings
+    with conn.cursor() as cur:
+        # Get vote IDs
+        cur.execute("""
+            SELECT id, source_vote_id FROM political_tracker.votes
+            WHERE country = 'UK' AND chamber = 'commons'
+        """)
+        vote_map = {row[1]: row[0] for row in cur.fetchall()}
+        
+        # Get member IDs
+        cur.execute("""
+            SELECT id, source_id FROM political_tracker.members
+            WHERE country = 'UK' AND chamber = 'commons'
+        """)
+        member_map = {row[1]: row[0] for row in cur.fetchall()}
+    
+    # Prepare all member_vote records (including absent)
+    all_records = []
+    for mv in member_votes:
+        vote_id = vote_map.get(mv["source_vote_id"])
+        member_id = member_map.get(mv["member_source_id"])
+        if vote_id and member_id:
+            all_records.append((vote_id, member_id, mv["position"]))
+    
+    # Add absent for members not in any list for each vote
+    # This is handled by the ON CONFLICT below - we insert all combinations
+    # Actually, simpler: insert only what we have, absent is the default
+    # But we need to ensure all members have a record for each vote
+    # Let's do a more complete approach: get all members, all votes, cross product
+    
+    with conn.cursor() as cur:
+        # Get all current members and votes
+        cur.execute("SELECT id FROM political_tracker.members WHERE country = 'UK' AND chamber = 'commons' AND is_current")
+        all_member_ids = [row[0] for row in cur.fetchall()]
+        cur.execute("SELECT id FROM political_tracker.votes WHERE country = 'UK' AND chamber = 'commons'")
+        all_vote_ids = [row[0] for row in cur.fetchall()]
+        
+        # Build set of existing (vote_id, member_id) from member_votes
+        existing = set()
+        for mv in member_votes:
+            vote_id = vote_map.get(mv["source_vote_id"])
+            member_id = member_map.get(mv["member_source_id"])
+            if vote_id and member_id:
+                existing.add((vote_id, member_id))
+        
+        # Insert missing as absent (position 4)
+        for vote_id in all_vote_ids:
+            for member_id in all_member_ids:
+                if (vote_id, member_id) not in existing:
+                    cur.execute("""
+                        INSERT INTO political_tracker.member_votes
+                            (vote_id, member_id, position)
+                        VALUES (%s, %s, 4)
+                        ON CONFLICT (vote_id, member_id) DO UPDATE SET
+                            position = EXCLUDED.position
+                    """, (vote_id, member_id))
+        
+        # Now update positions for those who voted
+        for mv in member_votes:
+            vote_id = vote_map.get(mv["source_vote_id"])
+            member_id = member_map.get(mv["member_source_id"])
+            if vote_id and member_id:
+                cur.execute("""
+                    INSERT INTO political_tracker.member_votes
+                        (vote_id, member_id, position)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (vote_id, member_id) DO UPDATE SET
+                        position = EXCLUDED.position
+                """, (vote_id, member_id, mv["position"]))
+    
+    conn.commit()
+    log.info("Upserted member_votes for %d votes", len(vote_map))
+
+
 def run():
     """Main entry point for UK ingest."""
     log.info("Starting UK ingest...")
@@ -141,12 +335,26 @@ def run():
     try:
         members = ingest_members()
         upsert_members(conn, members)
-
+        
+        # Build member lookup
+        members_by_source_id = {m["source_id"]: m for m in members}
+        
+        # Fetch and upsert votes
+        votes, member_votes = ingest_votes(members_by_source_id)
+        if votes:
+            upsert_votes(conn, votes)
+            upsert_member_votes(conn, member_votes, members_by_source_id)
+        
         # Update meta
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO political_tracker.meta (key, value, updated_at)
                 VALUES ('uk_members_last_refresh', %s, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """, (datetime.utcnow().isoformat(),))
+            cur.execute("""
+                INSERT INTO political_tracker.meta (key, value, updated_at)
+                VALUES ('uk_votes_last_refresh', %s, NOW())
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
             """, (datetime.utcnow().isoformat(),))
             conn.commit()

@@ -3,3 +3,11 @@ venv/
 __pycache__/
 *.py[cod]
 .env
+.env.local
+*.log
+data/cache/
+*.sqlite
+*.db
+.DS_Store
+*.swp
+*.swo

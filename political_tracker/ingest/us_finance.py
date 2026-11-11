@@ -13,6 +13,10 @@ from pathlib import Path
 
 import psycopg
 import requests
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
