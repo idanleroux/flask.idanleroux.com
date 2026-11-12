@@ -186,12 +186,12 @@ function renderDotMap(dots, country, chamber) {
         .attr('stroke', '#fff')
         .attr('stroke-width', 1.5)
         .attr('class', 'map-dot')
+        .attr('pointer-events', 'all')
         .attr('data-name', dot.name)
         .attr('data-party', dot.party)
         .attr('data-state', state)
         .style('cursor', 'pointer')
         .on('click', (event) => {
-          event.stopPropagation();
           showDotPanel(event, dot);
         })
         .on('mouseover', function() {
@@ -344,7 +344,7 @@ function handleFeatureClick(event, feature, partyById) {
   if (selectedFeature) {
     selectedFeature.classed('map-feature--selected', false);
   }
-  selectedFeature = d3.select(event.currentTarget);
+  selectedFeature = d3.select(event.target);
   selectedFeature.classed('map-feature--selected', true);
 
   // Show panel
@@ -365,7 +365,7 @@ function handleFeatureClick(event, feature, partyById) {
   `;
 
   // Position panel near click (clamped to viewport)
-  const rect = event.currentTarget.getBoundingClientRect();
+  const rect = event.target.getBoundingClientRect();
   const svgRect = document.getElementById('map-svg').getBoundingClientRect();
   panel.style.left = `${Math.min(rect.right - svgRect.left + 10, svgRect.width - 300)}px`;
   panel.style.top = `${Math.min(rect.top - svgRect.top, svgRect.height - 200)}px`;
@@ -378,8 +378,11 @@ function showDotPanel(event, dot) {
   const panel = document.getElementById('map-panel');
 
   // Update visual selection
-  mapG.selectAll('.map-dot').attr('stroke', '#fff').attr('stroke-width', 1);
-  d3.select(event.currentTarget).attr('stroke', '#000').attr('stroke-width', 2);
+  document.querySelectorAll('.map-dot').forEach(el => {
+    el.setAttribute('stroke', '#fff');
+    el.setAttribute('stroke-width', '1');
+  });
+  d3.select(event.target).attr('stroke', '#000').attr('stroke-width', 2);
 
   // Build stats HTML (if available from API)
   const hasStats = dot.participation_pct !== undefined || dot.party_loyalty_pct !== undefined || dot.votes_against_party_count !== undefined;
@@ -400,8 +403,9 @@ function showDotPanel(event, dot) {
   `;
 
   // Position panel near click (clamped to viewport)
-  const rect = event.currentTarget.getBoundingClientRect();
+  const rect = event.target.getBoundingClientRect();
   const svgRect = document.getElementById('map-svg').getBoundingClientRect();
+  panel.style.position = 'absolute';
   panel.style.left = `${Math.min(rect.right - svgRect.left + 10, svgRect.width - 300)}px`;
   panel.style.top = `${Math.min(rect.top - svgRect.top, svgRect.height - 200)}px`;
 }
