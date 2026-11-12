@@ -147,22 +147,10 @@ function renderDotMap(dots, country, chamber) {
   path = d3.geoPath().projection(projection);
 
   // Map is fixed (no zoom/pan) so it always fills the container without clipping
-  // Clicking empty SVG space deselects & closes the panel (dots/features handle their own clicks)
-  svg.on('click', (event) => {
-    const target = event.target;
-    // Only deselect if clicking empty SVG space, not a dot or feature
-    if (target.tagName === 'svg' || target.tagName === 'g') {
-      deselectAll(event);
-    }
-  });
+  // Dots/features handle their own clicks; empty SVG clicks handled by stopPropagation on dot/feature handlers
 
   // Main group
   mapG = svg.append('g');
-
-  // Draw state boundaries (US maps only)
-  if (country === 'US') {
-    drawStateBoundaries(mapG, projection);
-  }
 
   // Draw dots for each state
   Object.entries(dotsByState).forEach(([state, stateDots]) => {
@@ -179,13 +167,13 @@ function renderDotMap(dots, country, chamber) {
     stateDots.forEach((dot, i) => {
       let dx = 0, dy = 0;
       if (chamber === 'senate') {
-        const offset = 14;
+        const offset = 10;
         dx = stateDots.length > 1 ? (i === 0 ? -offset : offset) : 0;
       } else if (chamber === 'house' && stateDots.length > 1) {
         const cols = Math.ceil(Math.sqrt(stateDots.length));
         const row = Math.floor(i / cols);
         const col = i % cols;
-        const spacing = 14;
+        const spacing = 8;
         dx = (col - (cols - 1) / 2) * spacing;
         dy = (row - (cols - 1) / 2) * spacing;
       }
@@ -193,12 +181,11 @@ function renderDotMap(dots, country, chamber) {
       mapG.append('circle')
         .attr('cx', x + dx)
         .attr('cy', y + dy)
-        .attr('r', chamber === 'senate' ? 6 : 4)
+        .attr('r', chamber === 'senate' ? 5 : 3)
         .attr('fill', PARTY_COLOURS[dot.party] || DEFAULT_COLOUR)
         .attr('stroke', '#fff')
         .attr('stroke-width', 1.5)
         .attr('class', 'map-dot')
-        .attr('pointer-events', 'all')
         .attr('data-name', dot.name)
         .attr('data-party', dot.party)
         .attr('data-state', state)
@@ -237,46 +224,6 @@ function deselectAll() {
 }
 
 /**
- * Draw simple state boundary boxes around each state centroid (US maps only).
- * Rectangles centred on the projected centroid, sized by state prominence.
- * Drawn behind dots with pointer-events: none so they don't block interaction.
- */
-function drawStateBoundaries(mapG, projection) {
-  const STATE_SIZE = {
-    'AK': 40, 'TX': 32, 'CA': 32, 'MT': 28, 'NM': 26, 'AZ': 26, 'NV': 26,
-    'CO': 26, 'OR': 24, 'WY': 24, 'MI': 24, 'MN': 24, 'UT': 22, 'ID': 22,
-    'WA': 22, 'NE': 20, 'SD': 20, 'ND': 20, 'OK': 20, 'KS': 20,
-    'FL': 18, 'GA': 18, 'IL': 18, 'MO': 18, 'NC': 18, 'VA': 18,
-    'PA': 16, 'OH': 16, 'NY': 16, 'TN': 16, 'KY': 16, 'WI': 16, 'AL': 16,
-    'MS': 16, 'AR': 16, 'LA': 16, 'SC': 14, 'WV': 14, 'IA': 14, 'CT': 14,
-    'ME': 14, 'MA': 12, 'VT': 12, 'NH': 12, 'NJ': 12, 'MD': 12, 'DE': 10,
-    'RI': 8, 'DC': 6,
-  };
-
-  Object.entries(US_STATE_CENTROIDS).forEach(([state, centroid]) => {
-    const [lat, lng] = centroid;
-    const [x, y] = projection([lng, lat]);
-    if (!x || !y) return;
-
-    const size = STATE_SIZE[state] || 24;
-    const half = size / 2;
-
-    mapG.append('rect')
-      .attr('x', x - half)
-      .attr('y', y - half)
-      .attr('width', size)
-      .attr('height', size)
-      .attr('class', 'map-state-boundary')
-      .attr('fill', 'none')
-      .attr('stroke', '#9aa5b1')
-      .attr('stroke-width', 0.6)
-      .attr('stroke-opacity', 0.5)
-      .attr('data-state', state)
-      .style('pointer-events', 'none');
-  });
-}
-
-/**
  * Render geo-based map (for UK constituencies with GeoJSON)
  */
 function renderGeoMap(geojsonData, memberData, country, chamber) {
@@ -309,14 +256,6 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
   path = d3.geoPath().projection(projection);
 
   // Map is fixed (no zoom/pan) so it always fills the container without clipping
-  // Clicking empty SVG space deselects & closes the panel (dots/features handle their own clicks)
-  svg.on('click', (event) => {
-    const target = event.target;
-    // Only deselect if clicking empty SVG space, not a dot or feature
-    if (target.tagName === 'svg' || target.tagName === 'g') {
-      deselectAll(event);
-    }
-  });
 
   // Main group
   mapG = svg.append('g');
