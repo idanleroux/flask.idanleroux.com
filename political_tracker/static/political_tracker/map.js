@@ -61,19 +61,23 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
 
   const container = document.getElementById('map-container');
   svgElement = document.getElementById('map-svg');
-  svg = d3.select(svgElement);
-  const loading = container.querySelector('.map-loading');
+  const loading = container?.querySelector('.map-loading');
   legendEl = document.getElementById('map-legend');
   const panel = document.getElementById('map-panel');
 
-  if (!svgElement) return;
-
-  // Clear previous
-  svg.html('');
-  legendEl.innerHTML = '';
-  panel.hidden = true;
+  if (!svgElement || !container) {
+    if (loading) loading.hidden = true;
+    return;
+  }
 
   try {
+    svg = d3.select(svgElement);
+
+    // Clear previous
+    svg.html('');
+    if (legendEl) legendEl.innerHTML = '';
+    if (panel) panel.hidden = true;
+
     // Check D3 is loaded
     if (typeof d3 === 'undefined') {
       throw new Error('D3 library not loaded - check vendor/d3.min.js');
@@ -84,38 +88,49 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
       throw new Error('SVG is not a D3 selection object');
     }
 
-    // Load both in parallel
-    const [geoRes, apiRes] = await Promise.all([
-      fetch(geojsonUrl),
-      fetch(apiUrl)
-    ]);
+    // Fetch with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    if (!geoRes.ok) throw new Error(`GeoJSON load failed: ${geoRes.status} ${geoRes.statusText}`);
-    if (!apiRes.ok) throw new Error(`API load failed: ${apiRes.status} ${apiRes.statusText}`);
+    try {
+      // Load both in parallel
+      const [geoRes, apiRes] = await Promise.all([
+        fetch(geojsonUrl, { signal: controller.signal }),
+        fetch(apiUrl, { signal: controller.signal })
+      ]);
 
-    geojsonData = await geoRes.json();
-    const apiData = await apiRes.json();
+      if (!geoRes.ok) throw new Error(`GeoJSON load failed: ${geoRes.status} ${geoRes.statusText}`);
+      if (!apiRes.ok) throw new Error(`API load failed: ${apiRes.status} ${apiRes.statusText}`);
 
-    if (!geojsonData || !geojsonData.features) {
-      throw new Error('Invalid GeoJSON: missing features');
+      geojsonData = await geoRes.json();
+      const apiData = await apiRes.json();
+
+      if (!geojsonData || !geojsonData.features) {
+        throw new Error('Invalid GeoJSON: missing features');
+      }
+
+      // Check if API returns dot data (has 'dots' key) or feature data (has 'features')
+      if (apiData.dots) {
+        dotData = apiData.dots;
+        renderDotMap(dotData, country, chamber);
+      } else if (apiData.features) {
+        memberData = apiData.features;
+        renderGeoMap(geojsonData, memberData, country, chamber);
+      } else {
+        throw new Error('Invalid API response: no dots or features');
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    // Check if API returns dot data (has 'dots' key) or feature data (has 'features')
-    if (apiData.dots) {
-      dotData = apiData.dots;
-      renderDotMap(dotData, country, chamber);
-    } else if (apiData.features) {
-      memberData = apiData.features;
-      renderGeoMap(geojsonData, memberData, country, chamber);
-    } else {
-      throw new Error('Invalid API response: no dots or features');
-    }
-
-    loading.hidden = true;
+    if (loading) loading.hidden = true;
 
   } catch (err) {
     console.error('Map init failed:', err);
-    loading.textContent = `Failed to load map: ${err.message}`;
+    if (loading) {
+      loading.hidden = false;
+      loading.textContent = `Failed to load map: ${err.message}`;
+    }
   }
 }
 
