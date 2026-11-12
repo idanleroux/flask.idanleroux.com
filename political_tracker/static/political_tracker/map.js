@@ -56,7 +56,12 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
   try {
     // Check D3 is loaded
     if (typeof d3 === 'undefined') {
-      throw new Error('D3 library not loaded');
+      throw new Error('D3 library not loaded - check vendor/d3.min.js');
+    }
+
+    // Ensure svg is a D3 selection
+    if (!(svg instanceof d3.selection)) {
+      throw new Error('SVG is not a D3 selection object');
     }
 
     // Load both in parallel
