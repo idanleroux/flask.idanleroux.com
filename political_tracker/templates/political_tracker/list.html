@@ -124,7 +124,7 @@
   <div class="map-container" id="map-container" data-country="{{ country }}" data-chamber="{{ chamber }}">
     <div class="map-loading" aria-live="polite">Loading map…</div>
     <div class="map-wrapper">
-      <svg class="map-svg" id="map-svg" role="img" aria-label="{% if country == 'US' %}{% if chamber == 'house' %}US House districts{% else %}US states{% endif %}{% else %}UK constituencies{% endif %} coloured by party" width="100%" height="400"></svg>
+      <svg class="map-svg" id="map-svg" role="img" aria-label="{% if country == 'US' %}{% if chamber == 'house' %}US House districts{% else %}US states{% endif %}{% else %}UK constituencies{% endif %} coloured by party" width="800" height="500" style="width:800px;height:500px;"></svg>
     </div>
     <div class="map-legend" id="map-legend" aria-hidden="true"></div>
     <div class="map-panel" id="map-panel" hidden aria-live="polite"></div>

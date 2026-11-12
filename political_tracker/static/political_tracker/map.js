@@ -93,11 +93,17 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
 
     // Set up SVG with guaranteed dimensions
     const svgNode = svg.node();
-    let width = svgNode.clientWidth || 600;
-    let height = svgNode.clientHeight || 400;
+    let width = svgNode.clientWidth || 800;
+    let height = svgNode.clientHeight || 500;
 
-    // Always set explicit width/height as inline styles so D3 can compute projections
+    // Force explicit dimensions so D3 can compute projections
     svg.attr('width', width).attr('height', height);
+
+    // Handle empty data gracefully
+    if (!geojsonData.features || geojsonData.features.length === 0) {
+      loading.textContent = 'No boundary data available for this view.';
+      return;
+    }
 
     // Projection based on country/chamber
     projection = createProjection(country, chamber, width, height);
