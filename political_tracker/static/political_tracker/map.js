@@ -70,7 +70,7 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
 
   // Clear previous
   svg.html('');
-  legend.innerHTML = '';
+  legendEl.innerHTML = '';
   panel.hidden = true;
 
   try {
