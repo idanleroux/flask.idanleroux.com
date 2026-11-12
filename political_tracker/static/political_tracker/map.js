@@ -131,35 +131,27 @@ function renderDotMap(dots, country, chamber) {
   });
 
   // Create SVG projection for US (Albers USA)
-  const width = +svg.attr('width') || 800;
-  const height = +svg.attr('height') || 500;
+  const svgNode = svg.node();
+  const width = svgNode.clientWidth || 800;
+  const height = svgNode.clientHeight || 500;
 
-  // Albers USA projection — scaled to fit 800x500 container with padding
+  // Ensure SVG has explicit pixel dimensions so D3 can compute projections
+  svg.attr('width', width).attr('height', height);
+
+  // Albers USA projection — scaled to fill container with padding
+  const scale = Math.min(width, height) * 1.4;
   projection = d3.geoAlbersUsa()
-    .scale(900)
+    .scale(scale)
     .translate([width / 2, height / 2]);
 
   path = d3.geoPath().projection(projection);
 
-  // Zoom behaviour
-  zoomBehaviour = d3.zoom()
-    .scaleExtent([1, 10])
-    .on('zoom', (event) => {
-      mapG.attr('transform', event.transform);
-    });
-
-  svg.call(zoomBehaviour);
+  // Map is fixed (no zoom/pan) so it always fills the container without clipping
+  // Clicking empty SVG space deselects & closes the panel
+  svg.on('click', deselectAll);
 
   // Main group
   mapG = svg.append('g');
-
-  // Full-size background rect: clicking off dots deselects & closes panel
-  mapG.append('rect')
-    .attr('x', 0).attr('y', 0)
-    .attr('width', width).attr('height', height)
-    .attr('fill', 'transparent')
-    .style('cursor', 'default')
-    .on('click', deselectAll);
 
   // Draw state boundaries (US maps only)
   if (country === 'US') {
@@ -205,6 +197,7 @@ function renderDotMap(dots, country, chamber) {
         .attr('data-state', state)
         .style('cursor', 'pointer')
         .on('click', (event) => {
+          event.stopPropagation();
           showDotPanel(event, dot);
         })
         .on('mouseover', function() {
@@ -243,14 +236,14 @@ function deselectAll() {
  */
 function drawStateBoundaries(mapG, projection) {
   const STATE_SIZE = {
-    'AK': 55, 'TX': 45, 'CA': 45, 'MT': 40, 'NM': 38, 'AZ': 38, 'NV': 38,
-    'CO': 38, 'OR': 36, 'WY': 36, 'MI': 36, 'MN': 36, 'UT': 34, 'ID': 34,
-    'WA': 34, 'NE': 32, 'SD': 32, 'ND': 32, 'OK': 32, 'KS': 32,
-    'FL': 30, 'GA': 30, 'IL': 30, 'MO': 30, 'NC': 30, 'VA': 30,
-    'PA': 28, 'OH': 28, 'NY': 28, 'TN': 28, 'KY': 28, 'WI': 28, 'AL': 28,
-    'MS': 28, 'AR': 28, 'LA': 28, 'SC': 26, 'WV': 26, 'IA': 26, 'CT': 26,
-    'ME': 26, 'MA': 24, 'VT': 24, 'NH': 24, 'NJ': 24, 'MD': 24, 'DE': 16,
-    'RI': 14, 'DC': 10,
+    'AK': 40, 'TX': 32, 'CA': 32, 'MT': 28, 'NM': 26, 'AZ': 26, 'NV': 26,
+    'CO': 26, 'OR': 24, 'WY': 24, 'MI': 24, 'MN': 24, 'UT': 22, 'ID': 22,
+    'WA': 22, 'NE': 20, 'SD': 20, 'ND': 20, 'OK': 20, 'KS': 20,
+    'FL': 18, 'GA': 18, 'IL': 18, 'MO': 18, 'NC': 18, 'VA': 18,
+    'PA': 16, 'OH': 16, 'NY': 16, 'TN': 16, 'KY': 16, 'WI': 16, 'AL': 16,
+    'MS': 16, 'AR': 16, 'LA': 16, 'SC': 14, 'WV': 14, 'IA': 14, 'CT': 14,
+    'ME': 14, 'MA': 12, 'VT': 12, 'NH': 12, 'NJ': 12, 'MD': 12, 'DE': 10,
+    'RI': 8, 'DC': 6,
   };
 
   Object.entries(US_STATE_CENTROIDS).forEach(([state, centroid]) => {
@@ -308,25 +301,12 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
   }
   path = d3.geoPath().projection(projection);
 
-  // Zoom behaviour
-  zoomBehaviour = d3.zoom()
-    .scaleExtent([1, 20])
-    .on('zoom', (event) => {
-      mapG.attr('transform', event.transform);
-    });
-
-  svg.call(zoomBehaviour);
+  // Map is fixed (no zoom/pan) so it always fills the container without clipping
+  // Clicking empty SVG space deselects & closes the panel
+  svg.on('click', deselectAll);
 
   // Main group
   mapG = svg.append('g');
-
-  // Full-size background rect: clicking off features deselects & closes panel
-  mapG.append('rect')
-    .attr('x', 0).attr('y', 0)
-    .attr('width', width).attr('height', height)
-    .attr('fill', 'transparent')
-    .style('cursor', 'default')
-    .on('click', deselectAll);
 
   // Draw features
   mapG.selectAll('path')
@@ -344,7 +324,10 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
     .attr('stroke', '#0a1224')
     .attr('stroke-width', 0.5)
     .style('cursor', 'pointer')
-    .on('click', (event, d) => handleFeatureClick(event, d, partyById))
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      handleFeatureClick(event, d, partyById);
+    })
     .on('keydown', (event, d) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
