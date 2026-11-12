@@ -157,7 +157,7 @@ function renderDotMap(dots, country, chamber) {
     const centroid = US_STATE_CENTROIDS[state];
     if (!centroid) return;
 
-    const [lng, lat] = centroid;
+    const [lat, lng] = centroid;
     const [x, y] = projection([lng, lat]);
 
     if (!x || !y) return;
