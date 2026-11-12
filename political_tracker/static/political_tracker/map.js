@@ -15,7 +15,7 @@ const PARTY_COLOURS = {
   'Green': '#6ab023',
   'Green Party': '#6ab023',
   'Plaid Cymru': '#2e9e5b',
-  'Independent': '#8d98ad',
+  'Independent': '#f1c40f',
   // US
   'Democratic': '#4a90e2',
   'Democrat': '#4a90e2',
@@ -134,9 +134,9 @@ function renderDotMap(dots, country, chamber) {
   const width = +svg.attr('width') || 800;
   const height = +svg.attr('height') || 500;
 
-  // Albers USA projection
+  // Albers USA projection — scaled to fit 800x500 container with padding
   projection = d3.geoAlbersUsa()
-    .scale(1000)
+    .scale(900)
     .translate([width / 2, height / 2]);
 
   path = d3.geoPath().projection(projection);
@@ -152,6 +152,14 @@ function renderDotMap(dots, country, chamber) {
 
   // Main group
   mapG = svg.append('g');
+
+  // Full-size background rect: clicking off dots deselects & closes panel
+  mapG.append('rect')
+    .attr('x', 0).attr('y', 0)
+    .attr('width', width).attr('height', height)
+    .attr('fill', 'transparent')
+    .style('cursor', 'default')
+    .on('click', deselectAll);
 
   // Draw state boundaries (US maps only)
   if (country === 'US') {
@@ -210,6 +218,22 @@ function renderDotMap(dots, country, chamber) {
 
   // Add legend
   renderDotLegend(dots);
+}
+
+/**
+ * Deselect everything: clear dot/feature styling and hide the panel.
+ * Used when clicking the map background.
+ */
+function deselectAll() {
+  if (mapG) {
+    mapG.selectAll('.map-dot').attr('stroke', '#fff').attr('stroke-width', 1);
+  }
+  if (selectedFeature) {
+    selectedFeature.classed('map-feature--selected', false);
+    selectedFeature = null;
+  }
+  const panel = document.getElementById('map-panel');
+  if (panel) panel.hidden = true;
 }
 
 /**
@@ -295,6 +319,14 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
 
   // Main group
   mapG = svg.append('g');
+
+  // Full-size background rect: clicking off features deselects & closes panel
+  mapG.append('rect')
+    .attr('x', 0).attr('y', 0)
+    .attr('width', width).attr('height', height)
+    .attr('fill', 'transparent')
+    .style('cursor', 'default')
+    .on('click', deselectAll);
 
   // Draw features
   mapG.selectAll('path')
@@ -382,10 +414,18 @@ function handleFeatureClick(event, feature, partyById) {
 
   // Show panel
   panel.hidden = false;
+  // Build stats HTML (if available from API)
+  const hasStats = member.participation_pct !== undefined || member.party_loyalty_pct !== undefined || member.votes_against_party_count !== undefined;
+  const statsHtml = hasStats ? `
+    <p><strong>Participation:</strong> ${member.participation_pct !== undefined ? member.participation_pct.toFixed(1) + '%' : '—'}</p>
+    <p><strong>Party loyalty:</strong> ${member.party_loyalty_pct !== undefined ? member.party_loyalty_pct.toFixed(1) + '%' : '—'}</p>
+    <p><strong>Votes against party:</strong> ${member.votes_against_party_count !== undefined ? member.votes_against_party_count : '—'}</p>
+  ` : '';
   panel.innerHTML = `
     <h4>${escapeHtml(member.name)}</h4>
     <p><span class="party-badge" style="--party-colour: ${PARTY_COLOURS[party] || DEFAULT_COLOUR}">${escapeHtml(party || 'Unknown')}</span></p>
     <p>${escapeHtml(feature.properties.name || id)}</p>
+    ${statsHtml}
     <a href="/political_view_${currentCountry === 'US' ? 'US' : 'UK'}/member/${member.source_id}" class="btn btn--primary">View profile</a>
   `;
 
@@ -406,12 +446,21 @@ function showDotPanel(event, dot) {
   mapG.selectAll('.map-dot').attr('stroke', '#fff').attr('stroke-width', 1);
   d3.select(event.currentTarget).attr('stroke', '#000').attr('stroke-width', 2);
 
+  // Build stats HTML (if available from API)
+  const hasStats = dot.participation_pct !== undefined || dot.party_loyalty_pct !== undefined || dot.votes_against_party_count !== undefined;
+  const statsHtml = hasStats ? `
+    <p><strong>Participation:</strong> ${dot.participation_pct !== undefined ? dot.participation_pct.toFixed(1) + '%' : '—'}</p>
+    <p><strong>Party loyalty:</strong> ${dot.party_loyalty_pct !== undefined ? dot.party_loyalty_pct.toFixed(1) + '%' : '—'}</p>
+    <p><strong>Votes against party:</strong> ${dot.votes_against_party_count !== undefined ? dot.votes_against_party_count : '—'}</p>
+  ` : '';
+
   // Show panel
   panel.hidden = false;
   panel.innerHTML = `
     <h4>${escapeHtml(dot.name)}</h4>
     <p><span class="party-badge" style="--party-colour: ${PARTY_COLOURS[dot.party] || DEFAULT_COLOUR}">${escapeHtml(dot.party || 'Unknown')}</span></p>
     <p>${escapeHtml(dot.state)}</p>
+    ${statsHtml}
     <a href="/political_view_${currentCountry === 'US' ? 'US' : 'UK'}/member/${dot.source_id}" class="btn btn--primary">View profile</a>
   `;
 

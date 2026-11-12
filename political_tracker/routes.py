@@ -655,14 +655,18 @@ def us_map_api(chamber):
             with db.cursor() as cur:
                 if chamber == "house":
                     cur.execute("""
-                        SELECT m.state_or_nation, m.party, m.display_name, m.source_id
+                        SELECT m.state_or_nation, m.party, m.display_name, m.source_id,
+                               ms.participation_pct, ms.party_loyalty_pct, ms.votes_against_party_count
                         FROM political_tracker.members m
+                        LEFT JOIN political_tracker.member_stats ms ON ms.member_id = m.id
                         WHERE m.country = 'US' AND m.chamber = 'house' AND m.is_current
                     """)
                 else:
                     cur.execute("""
-                        SELECT m.state_or_nation, m.party, m.display_name, m.source_id
+                        SELECT m.state_or_nation, m.party, m.display_name, m.source_id,
+                               ms.participation_pct, ms.party_loyalty_pct, ms.votes_against_party_count
                         FROM political_tracker.members m
+                        LEFT JOIN political_tracker.member_stats ms ON ms.member_id = m.id
                         WHERE m.country = 'US' AND m.chamber = 'senate' AND m.is_current
                     """)
                 results = cur.fetchall()
@@ -672,7 +676,15 @@ def us_map_api(chamber):
 
     return {
         "dots": [
-            {"state": r[0], "party": r[1], "name": r[2], "source_id": r[3]}
+            {
+                "state": r[0],
+                "party": r[1],
+                "name": r[2],
+                "source_id": r[3],
+                "participation_pct": r[4],
+                "party_loyalty_pct": r[5],
+                "votes_against_party_count": r[6],
+            }
             for r in results
         ]
     }
@@ -686,8 +698,10 @@ def uk_map_api():
         with get_db() as db:
             with db.cursor() as cur:
                 cur.execute("""
-                    SELECT m.ons_code, m.party, m.display_name, m.source_id
+                    SELECT m.ons_code, m.party, m.display_name, m.source_id,
+                           ms.participation_pct, ms.party_loyalty_pct, ms.votes_against_party_count
                     FROM political_tracker.members m
+                    LEFT JOIN political_tracker.member_stats ms ON ms.member_id = m.id
                     WHERE m.country = 'UK' AND m.chamber = 'commons' AND m.is_current
                 """)
                 results = cur.fetchall()
@@ -697,7 +711,15 @@ def uk_map_api():
 
     return {
         "features": [
-            {"id": r[0], "party": r[1], "name": r[2], "source_id": r[3]}
+            {
+                "id": r[0],
+                "party": r[1],
+                "name": r[2],
+                "source_id": r[3],
+                "participation_pct": r[4],
+                "party_loyalty_pct": r[5],
+                "votes_against_party_count": r[6],
+            }
             for r in results
         ]
     }
