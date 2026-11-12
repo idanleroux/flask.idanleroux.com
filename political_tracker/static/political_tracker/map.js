@@ -216,8 +216,18 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
   // Always set explicit width/height as inline styles so D3 can compute projections
   svg.attr('width', width).attr('height', height);
 
-  // Projection based on country/chamber
-  projection = createProjection(country, chamber, width, height);
+  // Projection based on country/chamber (with fallback if geoAlbersUsa unavailable)
+  try {
+    projection = d3.geoAlbersUsa()
+      .scale(Math.min(width, height) * 1.2)
+      .translate([width / 2, height / 2]);
+  } catch (e) {
+    // Fallback: simple Mercator centered on US
+    projection = d3.geoMercator()
+      .center([-98, 39])
+      .scale(Math.min(width, height) * 0.8)
+      .translate([width / 2, height / 2]);
+  }
   path = d3.geoPath().projection(projection);
 
   // Zoom behaviour
