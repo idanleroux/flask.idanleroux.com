@@ -130,8 +130,8 @@ function renderDotMap(dots, country, chamber) {
   });
 
   // Create SVG projection for US (Albers USA)
-  const width = +svgElement.attr('width') || 800;
-  const height = +svgElement.attr('height') || 500;
+  const width = +svg.attr('width') || 800;
+  const height = +svg.attr('height') || 500;
 
   // Albers USA projection
   projection = d3.geoAlbersUsa()
