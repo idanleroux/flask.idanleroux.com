@@ -50,6 +50,7 @@ let geojsonData = null;
 let dotData = null;
 let selectedFeature = null;
 let svgElement, svg;
+let legendEl;
 
 /**
  * Initialise map
@@ -62,7 +63,7 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
   svgElement = document.getElementById('map-svg');
   svg = d3.select(svgElement);
   const loading = container.querySelector('.map-loading');
-  const legend = document.getElementById('map-legend');
+  legendEl = document.getElementById('map-legend');
   const panel = document.getElementById('map-panel');
 
   if (!svgElement) return;
@@ -152,6 +153,11 @@ function renderDotMap(dots, country, chamber) {
   // Main group
   mapG = svg.append('g');
 
+  // Draw state boundaries (US maps only)
+  if (country === 'US') {
+    drawStateBoundaries(mapG, projection);
+  }
+
   // Draw dots for each state
   Object.entries(dotsByState).forEach(([state, stateDots]) => {
     const centroid = US_STATE_CENTROIDS[state];
@@ -162,13 +168,21 @@ function renderDotMap(dots, country, chamber) {
 
     if (!x || !y) return;
 
-    // For Senate: 2 dots per state, offset them slightly
-    // For House: dots at centroid
-    const offset = chamber === 'senate' ? 12 : 0;
-
-    stateDots.forEach((dot, i) => {
-      const dx = chamber === 'senate' ? (i === 0 ? -offset : offset) : 0;
-      const dy = chamber === 'senate' ? 0 : 0;
+    stateDots.forEach((dot) => {
+      // For Senate: 2 dots per state, offset them slightly
+      // For House: spread dots in a small cluster so all representatives are visible
+      let dx = 0, dy = 0;
+      if (chamber === 'senate') {
+        dx = stateDots.length > 1 ? (stateDots.indexOf(dot) === 0 ? -12 : 12) : 0;
+      } else if (chamber === 'house' && stateDots.length > 1) {
+        // Grid layout: spread dots around centroid
+        const cols = Math.ceil(Math.sqrt(stateDots.length));
+        const row = Math.floor(stateDots.indexOf(dot) / cols);
+        const col = stateDots.indexOf(dot) % cols;
+        const spacing = 10;
+        dx = (col - (cols - 1) / 2) * spacing;
+        dy = (row - (cols - 1) / 2) * spacing;
+      }
 
       mapG.append('circle')
         .attr('cx', x + dx)
@@ -196,6 +210,48 @@ function renderDotMap(dots, country, chamber) {
 
   // Add legend
   renderDotLegend(dots);
+}
+
+/**
+ * Draw simple state boundary boxes around each state centroid (US maps only).
+ * Uses screen-space rectangles centred on the projected centroid, sized
+ * approximately to state prominence so all 50 states + DC are visible.
+ */
+function drawStateBoundaries(mapG, projection) {
+  // Approximate state boundary size (screen pixels) by state prominence.
+  // Larger states get bigger boxes; tiny states get smaller ones.
+  const STATE_SIZE = {
+    'AK': 55, 'TX': 45, 'CA': 45, 'MT': 40, 'NM': 38, 'AZ': 38, 'NV': 38,
+    'CO': 38, 'OR': 36, 'WY': 36, 'MI': 36, 'MN': 36, 'UT': 34, 'ID': 34,
+    'WA': 34, 'NE': 32, 'SD': 32, 'ND': 32, 'OK': 32, 'KS': 32,
+    'FL': 30, 'GA': 30, 'IL': 30, 'MO': 30, 'NC': 30, 'VA': 30,
+    'PA': 28, 'OH': 28, 'NY': 28, 'TN': 28, 'KY': 28, 'WI': 28, 'AL': 28,
+    'MS': 28, 'AR': 28, 'LA': 28, 'SC': 26, 'WV': 26, 'IA': 26, 'CT': 26,
+    'ME': 26, 'MA': 24, 'VT': 24, 'NH': 24, 'NJ': 24, 'MD': 24, 'DE': 16,
+    'RI': 14, 'DC': 10,
+  };
+
+  Object.entries(US_STATE_CENTROIDS).forEach(([state, centroid]) => {
+    const [lat, lng] = centroid;
+    const [x, y] = projection([lng, lat]);
+    if (!x || !y) return;
+
+    const size = STATE_SIZE[state] || 24;
+    const half = size / 2;
+
+    mapG.append('rect')
+      .attr('x', x - half)
+      .attr('y', y - half)
+      .attr('width', size)
+      .attr('height', size)
+      .attr('class', 'map-state-boundary')
+      .attr('fill', 'none')
+      .attr('stroke', '#9aa5b1')
+      .attr('stroke-width', 0.6)
+      .attr('stroke-opacity', 0.5)
+      .attr('data-state', state)
+      .style('pointer-events', 'none');
+  });
 }
 
 /**
@@ -285,7 +341,7 @@ function renderDotLegend(dots) {
   const partiesPresent = new Set(dots.map(d => d.party).filter(Boolean));
   const sortedParties = Array.from(partiesPresent).sort();
 
-  legend.innerHTML = sortedParties.map(party => `
+  legendEl.innerHTML = sortedParties.map(party => `
     <span class="legend-item">
       <span class="legend-swatch" style="background: ${PARTY_COLOURS[party] || DEFAULT_COLOUR}"></span>
       ${escapeHtml(party)}
@@ -300,7 +356,7 @@ function renderLegend(partyById) {
   const partiesPresent = new Set(Object.values(partyById).filter(Boolean));
   const sortedParties = Array.from(partiesPresent).sort();
 
-  legend.innerHTML = sortedParties.map(party => `
+  legendEl.innerHTML = sortedParties.map(party => `
     <span class="legend-item">
       <span class="legend-swatch" style="background: ${PARTY_COLOURS[party] || DEFAULT_COLOUR}"></span>
       ${escapeHtml(party)}
@@ -410,6 +466,7 @@ const mapStyles = `
   .map-feature:hover { stroke: var(--accent); stroke-width: 1.5; }
   .map-feature--selected { stroke: var(--accent); stroke-width: 2; }
   .map-dot { cursor: pointer; }
+  .map-state-boundary { cursor: default; }
   .legend-item { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; font-size: 12px; }
   .legend-swatch { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--border); }
 `;
