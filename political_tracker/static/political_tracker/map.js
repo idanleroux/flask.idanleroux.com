@@ -147,8 +147,14 @@ function renderDotMap(dots, country, chamber) {
   path = d3.geoPath().projection(projection);
 
   // Map is fixed (no zoom/pan) so it always fills the container without clipping
-  // Clicking empty SVG space deselects & closes the panel
-  svg.on('click', deselectAll);
+  // Clicking empty SVG space deselects & closes the panel (dots/features handle their own clicks)
+  svg.on('click', (event) => {
+    const target = event.target;
+    // Only deselect if clicking empty SVG space, not a dot or feature
+    if (target.tagName === 'svg' || target.tagName === 'g') {
+      deselectAll(event);
+    }
+  });
 
   // Main group
   mapG = svg.append('g');
@@ -173,13 +179,13 @@ function renderDotMap(dots, country, chamber) {
     stateDots.forEach((dot, i) => {
       let dx = 0, dy = 0;
       if (chamber === 'senate') {
-        const offset = 12;
+        const offset = 14;
         dx = stateDots.length > 1 ? (i === 0 ? -offset : offset) : 0;
       } else if (chamber === 'house' && stateDots.length > 1) {
         const cols = Math.ceil(Math.sqrt(stateDots.length));
         const row = Math.floor(i / cols);
         const col = i % cols;
-        const spacing = 10;
+        const spacing = 14;
         dx = (col - (cols - 1) / 2) * spacing;
         dy = (row - (cols - 1) / 2) * spacing;
       }
@@ -187,11 +193,12 @@ function renderDotMap(dots, country, chamber) {
       mapG.append('circle')
         .attr('cx', x + dx)
         .attr('cy', y + dy)
-        .attr('r', chamber === 'senate' ? 5 : 3)
+        .attr('r', chamber === 'senate' ? 6 : 4)
         .attr('fill', PARTY_COLOURS[dot.party] || DEFAULT_COLOUR)
         .attr('stroke', '#fff')
-        .attr('stroke-width', 1)
+        .attr('stroke-width', 1.5)
         .attr('class', 'map-dot')
+        .attr('pointer-events', 'all')
         .attr('data-name', dot.name)
         .attr('data-party', dot.party)
         .attr('data-state', state)
@@ -302,8 +309,14 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
   path = d3.geoPath().projection(projection);
 
   // Map is fixed (no zoom/pan) so it always fills the container without clipping
-  // Clicking empty SVG space deselects & closes the panel
-  svg.on('click', deselectAll);
+  // Clicking empty SVG space deselects & closes the panel (dots/features handle their own clicks)
+  svg.on('click', (event) => {
+    const target = event.target;
+    // Only deselect if clicking empty SVG space, not a dot or feature
+    if (target.tagName === 'svg' || target.tagName === 'g') {
+      deselectAll(event);
+    }
+  });
 
   // Main group
   mapG = svg.append('g');
