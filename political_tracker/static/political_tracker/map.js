@@ -49,6 +49,7 @@ let currentCountry, currentChamber;
 let geojsonData = null;
 let dotData = null;
 let selectedFeature = null;
+let svgElement, svg;
 
 /**
  * Initialise map
@@ -58,8 +59,8 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
   currentChamber = chamber;
 
   const container = document.getElementById('map-container');
-  const svgElement = document.getElementById('map-svg');
-  const svg = d3.select(svgElement);
+  svgElement = document.getElementById('map-svg');
+  svg = d3.select(svgElement);
   const loading = container.querySelector('.map-loading');
   const legend = document.getElementById('map-legend');
   const panel = document.getElementById('map-panel');
