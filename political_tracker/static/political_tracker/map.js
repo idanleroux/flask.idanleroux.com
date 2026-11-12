@@ -61,23 +61,19 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
 
   const container = document.getElementById('map-container');
   svgElement = document.getElementById('map-svg');
-  const loading = container?.querySelector('.map-loading');
+  svg = d3.select(svgElement);
+  const loading = container.querySelector('.map-loading');
   legendEl = document.getElementById('map-legend');
   const panel = document.getElementById('map-panel');
 
-  if (!svgElement || !container) {
-    if (loading) loading.hidden = true;
-    return;
-  }
+  if (!svgElement) return;
+
+  // Clear previous
+  svg.html('');
+  legendEl.innerHTML = '';
+  panel.hidden = true;
 
   try {
-    svg = d3.select(svgElement);
-
-    // Clear previous
-    svg.html('');
-    if (legendEl) legendEl.innerHTML = '';
-    if (panel) panel.hidden = true;
-
     // Check D3 is loaded
     if (typeof d3 === 'undefined') {
       throw new Error('D3 library not loaded - check vendor/d3.min.js');
@@ -88,49 +84,38 @@ async function initMap(apiUrl, geojsonUrl, country, chamber) {
       throw new Error('SVG is not a D3 selection object');
     }
 
-    // Fetch with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    // Load both in parallel
+    const [geoRes, apiRes] = await Promise.all([
+      fetch(geojsonUrl),
+      fetch(apiUrl)
+    ]);
 
-    try {
-      // Load both in parallel
-      const [geoRes, apiRes] = await Promise.all([
-        fetch(geojsonUrl, { signal: controller.signal }),
-        fetch(apiUrl, { signal: controller.signal })
-      ]);
+    if (!geoRes.ok) throw new Error(`GeoJSON load failed: ${geoRes.status} ${geoRes.statusText}`);
+    if (!apiRes.ok) throw new Error(`API load failed: ${apiRes.status} ${apiRes.statusText}`);
 
-      if (!geoRes.ok) throw new Error(`GeoJSON load failed: ${geoRes.status} ${geoRes.statusText}`);
-      if (!apiRes.ok) throw new Error(`API load failed: ${apiRes.status} ${apiRes.statusText}`);
+    geojsonData = await geoRes.json();
+    const apiData = await apiRes.json();
 
-      geojsonData = await geoRes.json();
-      const apiData = await apiRes.json();
-
-      if (!geojsonData || !geojsonData.features) {
-        throw new Error('Invalid GeoJSON: missing features');
-      }
-
-      // Check if API returns dot data (has 'dots' key) or feature data (has 'features')
-      if (apiData.dots) {
-        dotData = apiData.dots;
-        renderDotMap(dotData, country, chamber);
-      } else if (apiData.features) {
-        memberData = apiData.features;
-        renderGeoMap(geojsonData, memberData, country, chamber);
-      } else {
-        throw new Error('Invalid API response: no dots or features');
-      }
-    } finally {
-      clearTimeout(timeoutId);
+    if (!geojsonData || !geojsonData.features) {
+      throw new Error('Invalid GeoJSON: missing features');
     }
 
-    if (loading) loading.hidden = true;
+    // Check if API returns dot data (has 'dots' key) or feature data (has 'features')
+    if (apiData.dots) {
+      dotData = apiData.dots;
+      renderDotMap(dotData, country, chamber);
+    } else if (apiData.features) {
+      memberData = apiData.features;
+      renderGeoMap(geojsonData, memberData, country, chamber);
+    } else {
+      throw new Error('Invalid API response: no dots or features');
+    }
+
+    loading.hidden = true;
 
   } catch (err) {
     console.error('Map init failed:', err);
-    if (loading) {
-      loading.hidden = false;
-      loading.textContent = `Failed to load map: ${err.message}`;
-    }
+    loading.textContent = `Failed to load map: ${err.message}`;
   }
 }
 
@@ -183,17 +168,17 @@ function renderDotMap(dots, country, chamber) {
 
     if (!x || !y) return;
 
-    stateDots.forEach((dot) => {
-      // For Senate: 2 dots per state, offset them slightly
-      // For House: spread dots in a small cluster so all representatives are visible
+    // For Senate: 2 dots per state, offset them slightly
+    // For House: spread dots in a small grid so all representatives are visible
+    stateDots.forEach((dot, i) => {
       let dx = 0, dy = 0;
       if (chamber === 'senate') {
-        dx = stateDots.length > 1 ? (stateDots.indexOf(dot) === 0 ? -12 : 12) : 0;
+        const offset = 12;
+        dx = stateDots.length > 1 ? (i === 0 ? -offset : offset) : 0;
       } else if (chamber === 'house' && stateDots.length > 1) {
-        // Grid layout: spread dots around centroid
         const cols = Math.ceil(Math.sqrt(stateDots.length));
-        const row = Math.floor(stateDots.indexOf(dot) / cols);
-        const col = stateDots.indexOf(dot) % cols;
+        const row = Math.floor(i / cols);
+        const col = i % cols;
         const spacing = 10;
         dx = (col - (cols - 1) / 2) * spacing;
         dy = (row - (cols - 1) / 2) * spacing;
@@ -229,12 +214,10 @@ function renderDotMap(dots, country, chamber) {
 
 /**
  * Draw simple state boundary boxes around each state centroid (US maps only).
- * Uses screen-space rectangles centred on the projected centroid, sized
- * approximately to state prominence so all 50 states + DC are visible.
+ * Rectangles centred on the projected centroid, sized by state prominence.
+ * Drawn behind dots with pointer-events: none so they don't block interaction.
  */
 function drawStateBoundaries(mapG, projection) {
-  // Approximate state boundary size (screen pixels) by state prominence.
-  // Larger states get bigger boxes; tiny states get smaller ones.
   const STATE_SIZE = {
     'AK': 55, 'TX': 45, 'CA': 45, 'MT': 40, 'NM': 38, 'AZ': 38, 'NV': 38,
     'CO': 38, 'OR': 36, 'WY': 36, 'MI': 36, 'MN': 36, 'UT': 34, 'ID': 34,
