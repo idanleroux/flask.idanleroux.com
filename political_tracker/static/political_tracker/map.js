@@ -131,23 +131,24 @@ function renderDotMap(dots, country, chamber) {
   });
 
   // Create SVG projection for US (Albers USA)
-  const svgNode = svg.node();
-  const width = svgNode.clientWidth || 800;
-  const height = svgNode.clientHeight || 500;
+  const width = +svg.attr('width') || 800;
+  const height = +svg.attr('height') || 500;
 
-  // Ensure SVG has explicit pixel dimensions so D3 can compute projections
-  svg.attr('width', width).attr('height', height);
-
-  // Albers USA projection — scaled to fill container with padding
-  const scale = Math.min(width, height) * 1.4;
+  // Albers USA projection
   projection = d3.geoAlbersUsa()
-    .scale(scale)
+    .scale(1000)
     .translate([width / 2, height / 2]);
 
   path = d3.geoPath().projection(projection);
 
-  // Map is fixed (no zoom/pan) so it always fills the container without clipping
-  // Dots/features handle their own clicks; empty SVG clicks handled by stopPropagation on dot/feature handlers
+  // Zoom behaviour
+  zoomBehaviour = d3.zoom()
+    .scaleExtent([1, 10])
+    .on('zoom', (event) => {
+      mapG.attr('transform', event.transform);
+    });
+
+  svg.call(zoomBehaviour);
 
   // Main group
   mapG = svg.append('g');
@@ -167,7 +168,7 @@ function renderDotMap(dots, country, chamber) {
     stateDots.forEach((dot, i) => {
       let dx = 0, dy = 0;
       if (chamber === 'senate') {
-        const offset = 10;
+        const offset = 12;
         dx = stateDots.length > 1 ? (i === 0 ? -offset : offset) : 0;
       } else if (chamber === 'house' && stateDots.length > 1) {
         const cols = Math.ceil(Math.sqrt(stateDots.length));
@@ -186,7 +187,6 @@ function renderDotMap(dots, country, chamber) {
         .attr('stroke', '#fff')
         .attr('stroke-width', 1.5)
         .attr('class', 'map-dot')
-        .attr('pointer-events', 'all')
         .attr('data-name', dot.name)
         .attr('data-party', dot.party)
         .attr('data-state', state)
@@ -198,29 +198,13 @@ function renderDotMap(dots, country, chamber) {
           d3.select(this).attr('stroke', '#000').attr('stroke-width', 2);
         })
         .on('mouseout', function() {
-          d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1);
+          d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5);
         });
     });
   });
 
   // Add legend
   renderDotLegend(dots);
-}
-
-/**
- * Deselect everything: clear dot/feature styling and hide the panel.
- * Used when clicking the map background.
- */
-function deselectAll() {
-  if (mapG) {
-    mapG.selectAll('.map-dot').attr('stroke', '#fff').attr('stroke-width', 1);
-  }
-  if (selectedFeature) {
-    selectedFeature.classed('map-feature--selected', false);
-    selectedFeature = null;
-  }
-  const panel = document.getElementById('map-panel');
-  if (panel) panel.hidden = true;
 }
 
 /**
@@ -255,7 +239,14 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
   }
   path = d3.geoPath().projection(projection);
 
-  // Map is fixed (no zoom/pan) so it always fills the container without clipping
+  // Zoom behaviour
+  zoomBehaviour = d3.zoom()
+    .scaleExtent([1, 20])
+    .on('zoom', (event) => {
+      mapG.attr('transform', event.transform);
+    });
+
+  svg.call(zoomBehaviour);
 
   // Main group
   mapG = svg.append('g');
@@ -276,10 +267,7 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
     .attr('stroke', '#0a1224')
     .attr('stroke-width', 0.5)
     .style('cursor', 'pointer')
-    .on('click', (event, d) => {
-      event.stopPropagation();
-      handleFeatureClick(event, d, partyById);
-    })
+    .on('click', (event, d) => handleFeatureClick(event, d, partyById))
     .on('keydown', (event, d) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -344,7 +332,7 @@ function handleFeatureClick(event, feature, partyById) {
   if (selectedFeature) {
     selectedFeature.classed('map-feature--selected', false);
   }
-  selectedFeature = d3.select(event.target);
+  selectedFeature = d3.select(event.currentTarget);
   selectedFeature.classed('map-feature--selected', true);
 
   // Show panel
@@ -365,7 +353,7 @@ function handleFeatureClick(event, feature, partyById) {
   `;
 
   // Position panel near click (clamped to viewport)
-  const rect = event.target.getBoundingClientRect();
+  const rect = event.currentTarget.getBoundingClientRect();
   const svgRect = document.getElementById('map-svg').getBoundingClientRect();
   panel.style.left = `${Math.min(rect.right - svgRect.left + 10, svgRect.width - 300)}px`;
   panel.style.top = `${Math.min(rect.top - svgRect.top, svgRect.height - 200)}px`;
@@ -375,46 +363,35 @@ function handleFeatureClick(event, feature, partyById) {
  * Handle dot click — show panel (dot maps)
  */
 function showDotPanel(event, dot) {
-  try {
-    const panel = document.getElementById('map-panel');
+  const panel = document.getElementById('map-panel');
 
-    // Update visual selection — reset all dots
-    document.querySelectorAll('.map-dot').forEach(el => {
-      el.setAttribute('stroke', '#fff');
-      el.setAttribute('stroke-width', '1');
-    });
-    // Highlight clicked dot
-    event.target.setAttribute('stroke', '#000');
-    event.target.setAttribute('stroke-width', '2');
+  // Update visual selection
+  mapG.selectAll('.map-dot').attr('stroke', '#fff').attr('stroke-width', 1.5);
+  d3.select(event.currentTarget).attr('stroke', '#000').attr('stroke-width', 2);
 
-    // Build stats HTML (if available from API)
-    const hasStats = dot.participation_pct !== undefined || dot.party_loyalty_pct !== undefined || dot.votes_against_party_count !== undefined;
-    const statsHtml = hasStats ? `
-      <p><strong>Participation:</strong> ${dot.participation_pct !== undefined ? dot.participation_pct.toFixed(1) + '%' : '—'}</p>
-      <p><strong>Party loyalty:</strong> ${dot.party_loyalty_pct !== undefined ? dot.party_loyalty_pct.toFixed(1) + '%' : '—'}</p>
-      <p><strong>Votes against party:</strong> ${dot.votes_against_party_count !== undefined ? dot.votes_against_party_count : '—'}</p>
-    ` : '';
+  // Build stats HTML (if available from API)
+  const hasStats = dot.participation_pct !== undefined || dot.party_loyalty_pct !== undefined || dot.votes_against_party_count !== undefined;
+  const statsHtml = hasStats ? `
+    <p><strong>Participation:</strong> ${dot.participation_pct !== undefined ? dot.participation_pct.toFixed(1) + '%' : '—'}</p>
+    <p><strong>Party loyalty:</strong> ${dot.party_loyalty_pct !== undefined ? dot.party_loyalty_pct.toFixed(1) + '%' : '—'}</p>
+    <p><strong>Votes against party:</strong> ${dot.votes_against_party_count !== undefined ? dot.votes_against_party_count : '—'}</p>
+  ` : '';
 
-    // Show panel
-    panel.hidden = false;
-    panel.style.display = 'block';
-    panel.style.position = 'absolute';
-    panel.innerHTML = `
-      <h4>${escapeHtml(dot.name)}</h4>
-      <p><span class="party-badge" style="--party-colour: ${PARTY_COLOURS[dot.party] || DEFAULT_COLOUR}">${escapeHtml(dot.party || 'Unknown')}</span></p>
-      <p>${escapeHtml(dot.state)}</p>
-      ${statsHtml}
-      <a href="/political_view_${currentCountry === 'US' ? 'US' : 'UK'}/member/${dot.source_id}" class="btn btn--primary">View profile</a>
-    `;
+  // Show panel
+  panel.hidden = false;
+  panel.innerHTML = `
+    <h4>${escapeHtml(dot.name)}</h4>
+    <p><span class="party-badge" style="--party-colour: ${PARTY_COLOURS[dot.party] || DEFAULT_COLOUR}">${escapeHtml(dot.party || 'Unknown')}</span></p>
+    <p>${escapeHtml(dot.state)}</p>
+    ${statsHtml}
+    <a href="/political_view_${currentCountry === 'US' ? 'US' : 'UK'}/member/${dot.source_id}" class="btn btn--primary">View profile</a>
+  `;
 
-    // Position panel near click (clamped to viewport)
-    const rect = event.target.getBoundingClientRect();
-    const svgRect = document.getElementById('map-svg').getBoundingClientRect();
-    panel.style.left = `${Math.min(rect.right - svgRect.left + 10, svgRect.width - 300)}px`;
-    panel.style.top = `${Math.min(rect.top - svgRect.top, svgRect.height - 200)}px`;
-  } catch (err) {
-    console.error('showDotPanel failed:', err);
-  }
+  // Position panel near click (clamped to viewport)
+  const rect = event.currentTarget.getBoundingClientRect();
+  const svgRect = document.getElementById('map-svg').getBoundingClientRect();
+  panel.style.left = `${Math.min(rect.right - svgRect.left + 10, svgRect.width - 300)}px`;
+  panel.style.top = `${Math.min(rect.top - svgRect.top, svgRect.height - 200)}px`;
 }
 
 /**
@@ -459,7 +436,6 @@ const mapStyles = `
   .map-feature:hover { stroke: var(--accent); stroke-width: 1.5; }
   .map-feature--selected { stroke: var(--accent); stroke-width: 2; }
   .map-dot { cursor: pointer; }
-  .map-state-boundary { cursor: default; }
   .legend-item { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; font-size: 12px; }
   .legend-swatch { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--border); }
 `;
