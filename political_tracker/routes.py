@@ -645,17 +645,17 @@ def uk_members_api():
 
 @bp.get("/political_view_US/api/map/<chamber>")
 def us_map_api(chamber):
-    """JSON endpoint for US map data (districts or states)."""
+    """JSON endpoint for US map data (dot-based: dots at state centroids)."""
     if chamber not in ("house", "senate"):
         return {"error": "Invalid chamber"}, 400
 
-    results = []
+    dots = []
     try:
         with get_db() as db:
             with db.cursor() as cur:
                 if chamber == "house":
                     cur.execute("""
-                        SELECT m.district_or_constituency, m.party, m.display_name, m.source_id
+                        SELECT m.state_or_nation, m.party, m.display_name, m.source_id
                         FROM political_tracker.members m
                         WHERE m.country = 'US' AND m.chamber = 'house' AND m.is_current
                     """)
@@ -671,8 +671,8 @@ def us_map_api(chamber):
         pass
 
     return {
-        "features": [
-            {"id": r[0], "party": r[1], "name": r[2], "source_id": r[3]}
+        "dots": [
+            {"state": r[0], "party": r[1], "name": r[2], "source_id": r[3]}
             for r in results
         ]
     }
