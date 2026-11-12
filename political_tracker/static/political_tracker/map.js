@@ -134,9 +134,9 @@ function renderDotMap(dots, country, chamber) {
   const width = +svg.attr('width') || 800;
   const height = +svg.attr('height') || 500;
 
-  // Albers USA projection
+  // Albers USA projection — scaled to fill container
   projection = d3.geoAlbersUsa()
-    .scale(1000)
+    .scale(Math.min(width, height) * 1.5)
     .translate([width / 2, height / 2]);
 
   path = d3.geoPath().projection(projection);
@@ -173,23 +173,29 @@ function renderDotMap(dots, country, chamber) {
       mapG.append('circle')
         .attr('cx', x + dx)
         .attr('cy', y + dy)
-        .attr('r', chamber === 'senate' ? 5 : 3)
+        .attr('r', chamber === 'senate' ? 6 : 4)
         .attr('fill', PARTY_COLOURS[dot.party] || DEFAULT_COLOUR)
         .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5)
+        .attr('stroke-width', 2)
         .attr('class', 'map-dot')
+        .attr('pointer-events', 'all')
         .attr('data-name', dot.name)
         .attr('data-party', dot.party)
         .attr('data-state', state)
         .style('cursor', 'pointer')
         .on('click', (event) => {
-          showDotPanel(event, dot);
+          event.stopPropagation();
+          try {
+            showDotPanel(event, dot);
+          } catch (err) {
+            console.error('showDotPanel error:', err);
+          }
         })
         .on('mouseover', function() {
-          d3.select(this).attr('stroke', '#000').attr('stroke-width', 2);
+          d3.select(this).attr('stroke', '#000').attr('stroke-width', 3);
         })
         .on('mouseout', function() {
-          d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5);
+          d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
         });
     });
   });
