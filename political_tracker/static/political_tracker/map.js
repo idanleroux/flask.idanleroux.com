@@ -44,7 +44,7 @@ const US_STATE_CENTROIDS = {
 };
 
 // Map state
-let mapSvg, mapG, projection, path, zoomBehaviour;
+let mapSvg, mapG, projection, path;
 let currentCountry, currentChamber;
 let geojsonData = null;
 let dotData = null;
@@ -141,15 +141,6 @@ function renderDotMap(dots, country, chamber) {
 
   path = d3.geoPath().projection(projection);
 
-  // Zoom behaviour
-  zoomBehaviour = d3.zoom()
-    .scaleExtent([1, 10])
-    .on('zoom', (event) => {
-      mapG.attr('transform', event.transform);
-    });
-
-  svg.call(zoomBehaviour);
-
   // Main group
   mapG = svg.append('g');
 
@@ -238,15 +229,6 @@ function renderGeoMap(geojsonData, memberData, country, chamber) {
       .translate([width / 2, height / 2]);
   }
   path = d3.geoPath().projection(projection);
-
-  // Zoom behaviour
-  zoomBehaviour = d3.zoom()
-    .scaleExtent([1, 20])
-    .on('zoom', (event) => {
-      mapG.attr('transform', event.transform);
-    });
-
-  svg.call(zoomBehaviour);
 
   // Main group
   mapG = svg.append('g');
