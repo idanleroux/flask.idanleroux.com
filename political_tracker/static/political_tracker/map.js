@@ -375,39 +375,46 @@ function handleFeatureClick(event, feature, partyById) {
  * Handle dot click — show panel (dot maps)
  */
 function showDotPanel(event, dot) {
-  const panel = document.getElementById('map-panel');
+  try {
+    const panel = document.getElementById('map-panel');
 
-  // Update visual selection
-  document.querySelectorAll('.map-dot').forEach(el => {
-    el.setAttribute('stroke', '#fff');
-    el.setAttribute('stroke-width', '1');
-  });
-  d3.select(event.target).attr('stroke', '#000').attr('stroke-width', 2);
+    // Update visual selection — reset all dots
+    document.querySelectorAll('.map-dot').forEach(el => {
+      el.setAttribute('stroke', '#fff');
+      el.setAttribute('stroke-width', '1');
+    });
+    // Highlight clicked dot
+    event.target.setAttribute('stroke', '#000');
+    event.target.setAttribute('stroke-width', '2');
 
-  // Build stats HTML (if available from API)
-  const hasStats = dot.participation_pct !== undefined || dot.party_loyalty_pct !== undefined || dot.votes_against_party_count !== undefined;
-  const statsHtml = hasStats ? `
-    <p><strong>Participation:</strong> ${dot.participation_pct !== undefined ? dot.participation_pct.toFixed(1) + '%' : '—'}</p>
-    <p><strong>Party loyalty:</strong> ${dot.party_loyalty_pct !== undefined ? dot.party_loyalty_pct.toFixed(1) + '%' : '—'}</p>
-    <p><strong>Votes against party:</strong> ${dot.votes_against_party_count !== undefined ? dot.votes_against_party_count : '—'}</p>
-  ` : '';
+    // Build stats HTML (if available from API)
+    const hasStats = dot.participation_pct !== undefined || dot.party_loyalty_pct !== undefined || dot.votes_against_party_count !== undefined;
+    const statsHtml = hasStats ? `
+      <p><strong>Participation:</strong> ${dot.participation_pct !== undefined ? dot.participation_pct.toFixed(1) + '%' : '—'}</p>
+      <p><strong>Party loyalty:</strong> ${dot.party_loyalty_pct !== undefined ? dot.party_loyalty_pct.toFixed(1) + '%' : '—'}</p>
+      <p><strong>Votes against party:</strong> ${dot.votes_against_party_count !== undefined ? dot.votes_against_party_count : '—'}</p>
+    ` : '';
 
-  // Show panel
-  panel.hidden = false;
-  panel.innerHTML = `
-    <h4>${escapeHtml(dot.name)}</h4>
-    <p><span class="party-badge" style="--party-colour: ${PARTY_COLOURS[dot.party] || DEFAULT_COLOUR}">${escapeHtml(dot.party || 'Unknown')}</span></p>
-    <p>${escapeHtml(dot.state)}</p>
-    ${statsHtml}
-    <a href="/political_view_${currentCountry === 'US' ? 'US' : 'UK'}/member/${dot.source_id}" class="btn btn--primary">View profile</a>
-  `;
+    // Show panel
+    panel.hidden = false;
+    panel.style.display = 'block';
+    panel.style.position = 'absolute';
+    panel.innerHTML = `
+      <h4>${escapeHtml(dot.name)}</h4>
+      <p><span class="party-badge" style="--party-colour: ${PARTY_COLOURS[dot.party] || DEFAULT_COLOUR}">${escapeHtml(dot.party || 'Unknown')}</span></p>
+      <p>${escapeHtml(dot.state)}</p>
+      ${statsHtml}
+      <a href="/political_view_${currentCountry === 'US' ? 'US' : 'UK'}/member/${dot.source_id}" class="btn btn--primary">View profile</a>
+    `;
 
-  // Position panel near click (clamped to viewport)
-  const rect = event.target.getBoundingClientRect();
-  const svgRect = document.getElementById('map-svg').getBoundingClientRect();
-  panel.style.position = 'absolute';
-  panel.style.left = `${Math.min(rect.right - svgRect.left + 10, svgRect.width - 300)}px`;
-  panel.style.top = `${Math.min(rect.top - svgRect.top, svgRect.height - 200)}px`;
+    // Position panel near click (clamped to viewport)
+    const rect = event.target.getBoundingClientRect();
+    const svgRect = document.getElementById('map-svg').getBoundingClientRect();
+    panel.style.left = `${Math.min(rect.right - svgRect.left + 10, svgRect.width - 300)}px`;
+    panel.style.top = `${Math.min(rect.top - svgRect.top, svgRect.height - 200)}px`;
+  } catch (err) {
+    console.error('showDotPanel failed:', err);
+  }
 }
 
 /**
